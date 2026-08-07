@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""Standalone validator for the ctpa-oneapi auth + vehicle-discovery flow.
+
+Runs the same sequence the integration uses, with no Home Assistant import, so a
+broken login or an empty vehicle list can be diagnosed in seconds instead of by
+restarting HA and reading logs.
+
+    pip install aiohttp pyjwt
+    python scripts/validate_brand.py --brand S --username you@example.com
+
+Toyota and Subaru share the ctpa-oneapi backend; only the ForgeRock tenant and a
+few brand headers differ. The --no-appbrand / --no-brand-id / --no-bootstrap /
+--user-agent flags exist to re-confirm *which* of those differences are actually
+load-bearing, since that is undocumented and has changed before.
+
+Prints counts, generations, and masked VINs only. Response bodies from this API
+carry full VINs, precise location, and account details, so they are never
+printed in full even at --verbose.
+"""
+import argparse
+import asyncio
+import getpass
+import json
+import logging
+import sys
+from urllib.parse import parse_qs, urlencode, urlparse
+
+try:
+    import aiohttp
+except ImportError:
+    sys.exit("Missing dependency: pip install aiohttp pyjwt")
+
+_LOGGER = logging.getLogger("validate_brand")
+
+API_GATEWAY = "https://onecdn.telematicsct.com/oneapi/"
+RESOLVER_API_KEY = "pypIHG015k4ABHWbcI4G0a94F7cC0JDo1OynpAsG"
+
+# Identical across brands - only the ForgeRock host and brand headers differ.
+REALM_PATH = "realms/root/realms/tmna-native"
+CLIENT_ID = "oneappsdkclient"
+REDIRECT_URI = "com.toyota.oneapp:/oauth2Callback"
+SCOPE = "openid profile write"
+
+BRANDS = {
+    "T": {
+        "name": "Toyota",
+        "auth_host": "login.toyotadriverslogin.com",
+        "user_agent": (
+            "ToyotaOneApp/3.10.0 (com.toyota.oneapp; build:3100; Android 14) okhttp/4.12.0"
+        ),
+        "bootstrap": False,
+    },
+    "S": {
+        "name": "Subaru",
+        "auth_host": "login.subarudriverslogin.com",
+        "user_agent": (
+            "SubaruConnect/3.10.0 (com.subaru.oneapp; build:3100; Android 14) okhttp/4.12.0"
+        ),
+        "bootstrap": True,
+    },
+}
+
+
+def mask_vin(vin):
+    """VINs identify a specific car and its owner - show only the last 4."""
+    return f"...{vin[-4:]}" if vin else "???"
+
+
+class Validator:
+    def __init__(self, args):
+        self.args = args
+        self.brand = BRANDS[args.brand]
+        host = self.brand["auth_host"]
+        self.authenticate_url = f"https://{host}/json/{REALM_PATH}/authenticate"
+        self.authorize_url = f"https://{host}/oauth2/{REALM_PATH}/authorize"
+        self.access_token_url = f"https://{host}/oauth2/{REALM_PATH}/access_token"
+        self.access_token = None
+        self.guid = None
+
+    def brand_headers(self):
+        """The headers under test. Each can be suppressed to prove necessity."""
+        headers = {"X-BRAND": self.args.brand}
+        if not self.args.no_appbrand:
+            headers["X-APPBRAND"] = self.args.brand
+        if not self.args.no_brand_id:
+            headers["X-Brand-Id"] = self.args.brand
+        return headers
+
+    def user_agent(self):
+        if self.args.user_agent == "toyota":
+            return BRANDS["T"]["user_agent"]
+        if self.args.user_agent == "subaru":
+            return BRANDS["S"]["user_agent"]
+        return self.brand["user_agent"]
+
+    async def authenticate(self, session, username, password):
+        """ForgeRock callback loop. Returns the SSO tokenId."""
+        headers = {"Accept-API-Version": "resource=2.1, protocol=1.0"}
+        data = {}
+        otp_prompted = False
+
+        for _ in range(15):
+            for cb in data.get("callbacks", []):
+                cb_type = cb["type"]
+                prompt = cb["output"][0].get("value", "") if cb.get("output") else ""
+
+                if cb_type == "NameCallback":
+                    if prompt == "User Name":
+                        cb["input"][0]["value"] = username
+                    elif prompt == "ui_locales":
+                        cb["input"][0]["value"] = "en-US"
+                elif cb_type == "PasswordCallback":
+                    if prompt == "One Time Password":
+                        # Prompt lazily: many accounts never reach this callback.
+                        otp = input("One-time password (check email/SMS): ").strip()
+                        cb["input"][0]["value"] = otp
+                        otp_prompted = True
+                    elif prompt == "Password":
+                        cb["input"][0]["value"] = password
+                elif cb_type == "ChoiceCallback":
+                    cb["input"][0]["value"] = 0  # Local login
+                elif cb_type == "ConfirmationCallback":
+                    cb["input"][0]["value"] = 0  # Verify OTP
+                elif cb_type == "TextOutputCallback":
+                    if prompt == "Invalid OTP":
+                        sys.exit("FAIL: invalid OTP")
+
+            async with session.post(
+                self.authenticate_url, json=data, headers=headers
+            ) as resp:
+                body = await resp.text()
+                if resp.status != 200:
+                    _LOGGER.debug("authenticate body: %s", body[:500])
+                    sys.exit(f"FAIL: authenticate returned HTTP {resp.status}")
+                data = json.loads(body)
+                if "tokenId" in data:
+                    if otp_prompted:
+                        print("  OTP accepted")
+                    return data["tokenId"]
+
+        sys.exit("FAIL: authenticate loop exhausted without a tokenId")
+
+    async def authorize(self, session, token_id):
+        """Exchange the SSO cookie for an OAuth authorization code."""
+        params = {
+            "client_id": CLIENT_ID,
+            "scope": SCOPE,
+            "response_type": "code",
+            "redirect_uri": REDIRECT_URI,
+            "code_challenge": "plain",
+            "code_challenge_method": "plain",
+        }
+        headers = {"Cookie": f"iPlanetDirectoryPro={token_id}"}
+        url = f"{self.authorize_url}?{urlencode(params)}"
+
+        async with session.get(url, headers=headers, allow_redirects=False) as resp:
+            if resp.status != 302:
+                _LOGGER.debug("authorize body: %s", (await resp.text())[:500])
+                sys.exit(f"FAIL: authorize returned HTTP {resp.status}, expected 302")
+            query = parse_qs(urlparse(resp.headers["Location"]).query)
+            if "code" not in query:
+                sys.exit("FAIL: no authorization code in redirect")
+            return query["code"][0]
+
+    async def request_tokens(self, session, code):
+        data = {
+            "client_id": CLIENT_ID,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+            "code_verifier": "plain",
+            "code": code,
+        }
+        async with session.post(self.access_token_url, data=data) as resp:
+            body = await resp.text()
+            if resp.status != 200:
+                _LOGGER.debug("token body: %s", body[:500])
+                sys.exit(f"FAIL: token exchange returned HTTP {resp.status}")
+            tokens = json.loads(body)
+
+        self.access_token = tokens["access_token"]
+        # The GUID is the account identifier every gateway call is scoped to.
+        import jwt
+
+        claims = jwt.decode(
+            tokens["id_token"],
+            algorithms=["RS256"],
+            options={"verify_signature": False},
+            audience=CLIENT_ID,
+        )
+        self.guid = claims["sub"]
+        return claims
+
+    async def api_get(self, session, endpoint):
+        """GET against the shared ctpa-oneapi gateway. Returns (status, payload)."""
+        headers = {
+            "AUTHORIZATION": f"Bearer {self.access_token}",
+            "X-API-KEY": RESOLVER_API_KEY,
+            "X-GUID": self.guid,
+            "X-CHANNEL": "ONEAPP",
+            "x-region": "US",
+            "X-APPVERSION": "3.4.0",
+            "X-LOCALE": "en-US",
+            "User-Agent": self.user_agent(),
+            "Accept": "application/json",
+            **self.brand_headers(),
+        }
+        async with session.get(API_GATEWAY + endpoint, headers=headers) as resp:
+            body = await resp.text()
+            if resp.status >= 400:
+                _LOGGER.debug("%s -> HTTP %d: %s", endpoint, resp.status, body[:500])
+                return resp.status, None
+            parsed = json.loads(body)
+            return resp.status, parsed.get("payload", parsed)
+
+    async def run(self):
+        username = self.args.username or input("Username: ")
+        password = self.args.password or getpass.getpass("Password: ")
+
+        print(f"\n=== {self.brand['name']} (X-BRAND: {self.args.brand}) ===")
+        print(f"  auth host       : {self.brand['auth_host']}")
+        print(f"  brand headers   : {', '.join(sorted(self.brand_headers()))}")
+        print(f"  user-agent      : {self.user_agent().split(' ')[0]}")
+        bootstrap = self.brand["bootstrap"] and not self.args.no_bootstrap
+        print(f"  /v4/account     : {'yes' if bootstrap else 'no'}\n")
+
+        async with aiohttp.ClientSession() as session:
+            token_id = await self.authenticate(session, username, password)
+            print("  [ok] authenticate")
+
+            code = await self.authorize(session, token_id)
+            print("  [ok] authorize")
+
+            claims = await self.request_tokens(session, code)
+            print(f"  [ok] tokens (guid {claims['sub'][:8]}...)")
+
+            if bootstrap:
+                status, payload = await self.api_get(session, "v4/account")
+                if payload is None:
+                    print(f"  [!!] v4/account HTTP {status} - continuing anyway")
+                else:
+                    print("  [ok] v4/account bootstrap")
+
+            status, vehicles = await self.api_get(session, "v2/vehicle/guid")
+            if vehicles is None:
+                sys.exit(f"\nFAIL: v2/vehicle/guid returned HTTP {status}")
+
+            print(f"\n  {len(vehicles)} vehicle(s) returned\n")
+            if not vehicles:
+                print(
+                    "  Empty list with a 200 is the known symptom of a missing\n"
+                    "  brand header or a skipped /v4/account bootstrap."
+                )
+                return 1
+
+            for v in vehicles:
+                print(
+                    f"    {v.get('modelYear', '?')} {v.get('modelName', '?')}"
+                    f"  vin={mask_vin(v.get('vin'))}"
+                    f"  gen={v.get('generation', '?')}"
+                    f"  ev={v.get('evVehicle')}"
+                    f"  sub={v.get('remoteSubscriptionStatus', '?')}"
+                )
+            print()
+            return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Validate ctpa-oneapi auth and vehicle discovery for one brand.",
+    )
+    parser.add_argument("--brand", choices=["T", "S"], default="T")
+    parser.add_argument("--username")
+    parser.add_argument("--password", help="omit to be prompted securely")
+    parser.add_argument(
+        "--no-appbrand",
+        action="store_true",
+        help="suppress X-APPBRAND to test whether it is load-bearing",
+    )
+    parser.add_argument(
+        "--no-brand-id",
+        action="store_true",
+        help="suppress X-Brand-Id to test whether it is load-bearing",
+    )
+    parser.add_argument(
+        "--no-bootstrap",
+        action="store_true",
+        help="skip the /v4/account call that Subaru appears to require",
+    )
+    parser.add_argument(
+        "--user-agent",
+        choices=["match", "toyota", "subaru"],
+        default="match",
+        help="send a deliberately mismatched UA to test whether it is checked",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="  %(message)s",
+    )
+    sys.exit(asyncio.run(Validator(args).run()) or 0)
+
+
+if __name__ == "__main__":
+    main()

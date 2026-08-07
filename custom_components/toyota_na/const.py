@@ -9,6 +9,9 @@ from toyota_na.vehicle.base_vehicle import RemoteRequestCommand
 
 DOMAIN = "toyota_na"
 
+BRAND = "brand"
+"""Config entry key holding the brand code. Absent on pre-Subaru entries."""
+
 DOOR_LOCK = "door_lock"
 DOOR_UNLOCK = "door_unlock"
 ENGINE_START = "engine_start"

@@ -2,15 +2,16 @@
     "config": {
       "step": {
         "user": {
-          "title": "Toyota Connected Services",
-          "description": "Please input the username and password",
+          "title": "Connected Services",
+          "description": "Select your brand and sign in with your Toyota or SubaruConnect account",
           "data": {
+            "brand": "Brand",
             "username": "Username",
             "password": "Password"
           }
         },
         "otp": {
-          "title": "Verfication code",
+          "title": "Verification code",
           "description": "Check email or phone for verification code",
           "data": {
             "code": "Verification Code"
@@ -21,6 +22,9 @@
         "not_logged_in": "Not logged in",
         "otp_not_logged_in": "Invalid Verification code",
         "unknown": "Unexpected error."
+      },
+      "abort": {
+        "reauth_successful": "Re-authentication was successful"
       }
     }
   }

@@ -9,6 +9,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import DOMAIN
+from .oneapi import get_brand
 
 
 class ToyotaNABaseEntity(CoordinatorEntity[list[ToyotaVehicle]]):
@@ -44,11 +45,15 @@ class ToyotaNABaseEntity(CoordinatorEntity[list[ToyotaVehicle]]):
         if self.vehicle is not None:
             model = f"{self.vehicle.model_year} {self.vehicle.model_name}"
 
+        # Set on the coordinator by async_setup_entry; get_brand falls back to
+        # Toyota so this stays correct if the attribute is ever missing.
+        brand = get_brand(getattr(self.coordinator, "brand", None))
+
         return {
             "identifiers": {(DOMAIN, self.vin)},
             "name": model,
             "model": model,
-            "manufacturer": "Toyota Motor North America",
+            "manufacturer": brand.manufacturer,
         }
 
     @property

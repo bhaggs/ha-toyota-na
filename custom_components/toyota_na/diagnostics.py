@@ -9,9 +9,9 @@ from homeassistant.const import (
     CONF_PASSWORD,
 )
 from homeassistant.core import HomeAssistant
-from toyota_na.client import ToyotaOneClient
 
 from .const import DOMAIN
+from .oneapi import OneClient
 
 TO_REDACT = {
     CONF_ACCESS_TOKEN,
@@ -33,9 +33,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, config_entry: ConfigEntry
 ) -> dict:
     """Return diagnostics for a config entry."""
-    client: ToyotaOneClient = hass.data[DOMAIN][config_entry.entry_id][
-        "toyota_na_client"
-    ]
+    client: OneClient = hass.data[DOMAIN][config_entry.entry_id]["toyota_na_client"]
 
     # We don't directly expose this from the vehicle api abstraction, but it's critical to dump this in diagnostics for debugging
     user_vehicle_list = await client.get_user_vehicle_list()
@@ -85,6 +83,7 @@ async def async_get_config_entry_diagnostics(
 
     return async_redact_data(
         {
+            "brand": client.brand.code,
             "config_entry": async_redact_data(dict(config_entry.data), TO_REDACT),
             "vehicle_list": {"data": user_vehicle_list},
             "vehicle_status": {"data": vehicle_status},
