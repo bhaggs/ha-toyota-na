@@ -10,7 +10,9 @@ when you add the integration, and everything downstream behaves the same.
 
 > **The Subaru flow is unofficial and reverse-engineered.** Subaru publishes no API
 > for this. The brand headers, login tenant, and account-bootstrap call were
-> recovered by decompiling the SubaruConnect Android app. Subaru can change or
+> recovered by [@adepssimius](https://github.com/adepssimius) and
+> [@keithnet](https://github.com/keithnet) from the SubaruConnect Android app —
+> see [Credits](#credits). Subaru can change or
 > break any of it without notice. The Toyota flow is no more official, but it has
 > years of community use behind it; the Subaru path does not. Treat it accordingly.
 
@@ -51,14 +53,11 @@ Services:
 
 ## Subaru support
 
-Applies to the SubaruConnect vehicles that run on the shared backend — Solterra,
-Trailseeker, and Uncharted (MY23+). Vehicles on MySubaru/STARLINK are a different
-service entirely and are not supported here; use the official `subaru` integration
-for those.
+Works for vehicles which use the SubaruConnect app–Solterra, Trailseeker, and Uncharted (MY23+).
 
-Subaru gets the same feature set listed above, not a different one. This is parity
-through a shared backend rather than a separate implementation, so whatever works
-for a Toyota EV works the same way for a Solterra.
+Vehicles which use the MySubaru app are not supported here; use the official `subaru` integration for those.
+
+Subaru vehicles get the same feature set listed above.
 
 What actually differs per brand lives in one file,
 [`oneapi/brands.py`](custom_components/toyota_na/oneapi/brands.py):
@@ -127,7 +126,6 @@ Thanks @DurgNomis-drol for making the the original [Toyota Integration](https://
 
 Thanks @visualage for finding the way to authenticate headlessly.
 
-Subaru support rests on APK reverse-engineering done independently by two people who
-arrived at matching findings — the `login.subarudriverslogin.com` tenant, the
-`X-APPBRAND` header, and the `v4/account` bootstrap. That corroboration is why these
-are treated as settled rather than guesswork.
+Subaru support is based on the reverse-engineering work done by
+[@adepssimius](https://github.com/adepssimius) and
+[@keithnet](https://github.com/keithnet).

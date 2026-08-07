@@ -1,5 +1,9 @@
 """Per-brand configuration for the shared ctpa-oneapi backend.
 
+The Subaru values below - login tenant, X-APPBRAND, and the v4/account bootstrap
+- come from APK reverse-engineering done independently by @adepssimius and
+@keithnet, who arrived at matching findings.
+
 Every value that differs between Toyota and Subaru lives here. Nothing else in
 the integration should branch on brand -- if a new difference turns up, add a
 field to BrandConfig rather than an `if brand == "S"` at the call site.
