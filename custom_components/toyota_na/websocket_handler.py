@@ -1,8 +1,11 @@
-"""AWS AppSync WebSocket handler for Toyota vehicle status subscriptions.
+"""AWS AppSync WebSocket handler for vehicle status subscriptions.
 
 The Toyota app (v3.1.0+) uses AppSync WebSocket subscriptions exclusively
 for door/lock/window/hood/trunk status on 21MM+ vehicles. The HTTP
 GetVehicleStatus query returns 'vehicle not found' by design.
+
+The endpoint and API key are shared across brands; only the brand headers,
+taken from the client, differ.
 
 Flow (per APK analysis of SubscribeVehicleStatusDefaultRepo):
 1. Connect WebSocket to AppSync realtime endpoint
@@ -67,7 +70,7 @@ class ToyotaWebSocketHandler:
     """Manages AppSync WebSocket connection for vehicle status push notifications."""
 
     def __init__(self, client):
-        """Initialize with a ToyotaOneClient instance (already monkey-patched)."""
+        """Initialize with a brand-scoped OneClient instance."""
         self._client = client
         self._session = None
         self._ws = None
@@ -144,6 +147,7 @@ class ToyotaWebSocketHandler:
             "x-api-key": APPSYNC_API_KEY,
             "Authorization": f"Bearer {token}",
             "x-channel": "ONEAPP",
+            **self._client.brand.headers(),
         }
         header_b64 = base64.b64encode(
             json.dumps(auth_header).encode()
@@ -277,6 +281,7 @@ class ToyotaWebSocketHandler:
                         "x-channel": "ONEAPP",
                         "vin": vin,
                         "x-guid": guid,
+                        **self._client.brand.headers(),
                     }
                 },
             },

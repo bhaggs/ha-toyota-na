@@ -1,46 +1,8 @@
-from ctypes import cast
 from datetime import timedelta, datetime
 import logging
 import asyncio
 
-from toyota_na.auth import ToyotaOneAuth
-from toyota_na.client import ToyotaOneClient
-
-# Patch client code
-from .patch_client import (
-    get_electric_realtime_status,
-    get_electric_status,
-    api_request,
-    _auth_headers,
-    get_telemetry,
-    get_vehicle_status_17cyplus,
-    get_engine_status_17cyplus,
-    send_refresh_request_17cyplus,
-    remote_request_17cyplus,
-    get_vehicle_status_17cy,
-    get_engine_status_17cy,
-    send_refresh_request_17cy,
-    graphql_request,
-    graphql_pre_wake,
-    graphql_confirm_subscription,
-    graphql_refresh_status,
-)
-ToyotaOneClient.get_electric_realtime_status = get_electric_realtime_status
-ToyotaOneClient.get_electric_status = get_electric_status
-ToyotaOneClient.api_request = api_request
-ToyotaOneClient._auth_headers = _auth_headers
-ToyotaOneClient.get_telemetry = get_telemetry
-ToyotaOneClient.get_vehicle_status_17cyplus = get_vehicle_status_17cyplus
-ToyotaOneClient.get_engine_status_17cyplus = get_engine_status_17cyplus
-ToyotaOneClient.send_refresh_request_17cyplus = send_refresh_request_17cyplus
-ToyotaOneClient.remote_request_17cyplus = remote_request_17cyplus
-ToyotaOneClient.get_vehicle_status_17cy = get_vehicle_status_17cy
-ToyotaOneClient.get_engine_status_17cy = get_engine_status_17cy
-ToyotaOneClient.send_refresh_request_17cy = send_refresh_request_17cy
-ToyotaOneClient.graphql_request = graphql_request
-ToyotaOneClient.graphql_pre_wake = graphql_pre_wake
-ToyotaOneClient.graphql_confirm_subscription = graphql_confirm_subscription
-ToyotaOneClient.graphql_refresh_status = graphql_refresh_status
+from .oneapi import OneAuth, OneClient, get_brand
 
 # Patch base_vehicle
 import toyota_na.vehicle.base_vehicle
@@ -63,7 +25,7 @@ from toyota_na.vehicle.vehicle_generations.seventeen_cy import SeventeenCYToyota
 from .patch_seventeen_cy import SeventeenCYToyotaVehicle
 toyota_na.vehicle.vehicle_generations.seventeen_cy.SeventeenCYToyotaVehicle = SeventeenCYToyotaVehicle
 
-from toyota_na.exceptions import AuthError, LoginError
+from toyota_na.exceptions import AuthError
 from toyota_na.vehicle.base_vehicle import RemoteRequestCommand, ToyotaVehicle
 
 #Patch get_vehicles
@@ -79,6 +41,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .websocket_handler import ToyotaWebSocketHandler
 
 from .const import (
+    BRAND,
     COMMAND_MAP,
     DOMAIN,
     ENGINE_START,
@@ -147,7 +110,11 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
                         await vehicle.send_command(COMMAND_MAP[remote_action])
                         break
 
-                _LOGGER.info("Handling service call %s for %s ", remote_action, vin)
+                # Masked: HA logs at INFO by default and these get pasted into
+                # public support threads. Last 4 is enough to tell cars apart.
+                _LOGGER.info(
+                    "Handling service call %s for vehicle ...%s", remote_action, vin[-4:]
+                )
 
         return
 
@@ -164,17 +131,21 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
 
-    client = ToyotaOneClient(
-        ToyotaOneAuth(
+    # Entries created before brand support existed have no BRAND key; they are
+    # Toyota, and get_brand defaults accordingly.
+    brand = get_brand(entry.data.get(BRAND))
+
+    client = OneClient(
+        OneAuth(
+            brand=brand,
             initial_tokens=entry.data["tokens"],
             callback=lambda tokens: update_tokens(tokens, hass, entry),
         )
     )
     try:
-        client.auth.set_tokens(entry.data["tokens"])
         await client.auth.check_tokens()
     except AuthError as e:
-        _LOGGER.exception(e)
+        _LOGGER.debug("Stored tokens rejected for %s: %s", brand.name, e)
         raise ConfigEntryAuthFailed(e) from e
 
     coordinator = DataUpdateCoordinator(
@@ -184,6 +155,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         update_method=lambda: update_vehicles_status(hass, client, entry),
         update_interval=timedelta(seconds=UPDATE_INTERVAL),
     )
+    # Entities read this for the device-registry manufacturer. Attached here
+    # rather than passed through every platform's entity constructor, which
+    # would mean touching all four platforms for one string.
+    coordinator.brand = brand
+
     await coordinator.async_config_entry_first_refresh()
 
     # Start WebSocket handler for vehicle status push notifications (21MM+)
@@ -211,7 +187,7 @@ def update_tokens(tokens: dict[str, str], hass: HomeAssistant, entry: ConfigEntr
     hass.config_entries.async_update_entry(entry, data=data)
 
 
-async def update_vehicles_status(hass: HomeAssistant, client: ToyotaOneClient, entry: ConfigEntry):
+async def update_vehicles_status(hass: HomeAssistant, client: OneClient, entry: ConfigEntry):
     need_refresh = False
     need_refresh_before = datetime.utcnow().timestamp() - REFRESH_STATUS_INTERVAL
     if "last_refreshed_at" not in entry.data or entry.data["last_refreshed_at"] < need_refresh_before:
@@ -219,6 +195,18 @@ async def update_vehicles_status(hass: HomeAssistant, client: ToyotaOneClient, e
     try:
         _LOGGER.debug("Updating vehicle status")
         raw_vehicles = await get_vehicles(client)
+        if not raw_vehicles:
+            # These are undocumented, reverse-engineered endpoints on a service
+            # that changes without notice. An empty list usually means a new
+            # required header or a stale session, not a vanished car - so leave
+            # the entry loaded and try again next interval rather than failing
+            # setup and forcing the user to reconfigure.
+            _LOGGER.warning(
+                "%s returned no vehicles. If this persists, the backend may have "
+                "changed; run scripts/validate_brand.py to diagnose.",
+                client.brand.name,
+            )
+            return []
         vehicles: list[ToyotaVehicle] = []
         for vehicle in raw_vehicles:
             if vehicle.subscribed is not True:
@@ -242,11 +230,12 @@ async def update_vehicles_status(hass: HomeAssistant, client: ToyotaOneClient, e
         hass.config_entries.async_update_entry(entry, data=entry_data)
         return vehicles
     except AuthError as e:
-        try:
-            client.auth.login(entry.data["username"], entry.data["password"])
-        except LoginError:
-            _LOGGER.exception("Error logging in")
-            raise ConfigEntryAuthFailed(e) from e
+        # Hand off to Home Assistant's reauth flow rather than retrying the
+        # stored password on a loop. Login now needs an OTP the integration
+        # cannot supply unattended, and repeatedly replaying bad credentials
+        # risks the account being locked.
+        _LOGGER.debug("Authentication failed, requesting reauth: %s", e)
+        raise ConfigEntryAuthFailed(e) from e
     except Exception as e:
         _LOGGER.exception("Error fetching data")
         raise UpdateFailed(e) from e
