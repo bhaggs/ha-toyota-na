@@ -2,7 +2,7 @@ from toyota_na.vehicle.base_vehicle import VehicleFeatures
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfPressure
+from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfPressure
 
 from toyota_na.vehicle.base_vehicle import RemoteRequestCommand
 
@@ -355,11 +355,16 @@ SENSORS = [
         "electric": True,
     },
     {
+        # Always kilometres, unlike evDistance/evDistanceAC which the API
+        # converts to the account's preferred unit and tags with evDistanceUnit.
+        # This one arrives raw and unlabelled: a Solterra reporting 375.5 here
+        # alongside an EV Range of 233.0 mi cannot be miles (no Solterra travels
+        # 375 miles), and 375.5 km is 233.3 mi -- the same figure.
         "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:gauge",
         "feature": VehicleFeatures.EvTravelableDistance,
         "name": "EV Travelable Distance",
-        "unit": "",
+        "unit": UnitOfLength.KILOMETERS,
         "subscription": True,
         "electric": True,
     },
