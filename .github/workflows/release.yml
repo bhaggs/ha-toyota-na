@@ -2,24 +2,34 @@ name: Release
 on:
   release:
     types: [published]
+
+# GITHUB_TOKEN defaults to read-only, which silently breaks asset upload with
+# "Resource not accessible by integration" only at the upload step - after the
+# zip has been built, so the run looks like it nearly worked.
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Prepare release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      # Build
-      - name: Build the file
+      - uses: actions/checkout@v4
+
+      # HACS reads hacs.json's `filename` from the release assets and expects
+      # the integration files at the zip root, so build from inside the
+      # component directory rather than zipping the path to it.
+      - name: Build the zip
         run: |
-          ls /home/runner/work/
-          cd /home/runner/work/ha-toyota-na/ha-toyota-na/custom_components/toyota_na
+          cd custom_components/toyota_na
           zip -r ha_toyota_na.zip *
-      # Upload build file to the release as an asset
+          unzip -l ha_toyota_na.zip
+
+      # Uses the gh CLI (preinstalled on runners) instead of a third-party
+      # action, so there is no Node runtime to age out from under us.
       - name: Upload zip to release
-        uses: svenstaro/upload-release-action@v1-release
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: /home/runner/work/ha-toyota-na/ha-toyota-na/custom_components/toyota_na/ha_toyota_na.zip
-          asset_name: ha_toyota_na.zip
-          tag: ${{ github.ref }}
-          overwrite: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            custom_components/toyota_na/ha_toyota_na.zip --clobber
