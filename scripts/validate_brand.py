@@ -299,6 +299,15 @@ class Validator:
             claims = await self.request_tokens(session, code)
             print(f"  [ok] tokens (guid {claims['sub'][:8]}...)")
 
+            # The config flow identifies the account from these claims. Print the
+            # key names (never the values - they are personal data) so a missing
+            # one is obvious rather than surfacing as a generic UI error.
+            print(f"  [--] id_token claims: {', '.join(sorted(claims))}")
+            print(
+                "  [--] email claim: "
+                + ("present" if claims.get("email") else "ABSENT - falls back to sub")
+            )
+
             if self.args.matrix:
                 print()
                 return await self.run_matrix(session)

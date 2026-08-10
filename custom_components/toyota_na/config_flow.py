@@ -78,10 +78,30 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             await client.auth.login(self.user_info["username"], self.user_info["password"], self.otp_info["code"])
             id_info = await client.auth.get_id_info()
+
+            # The OAuth scope is "openid profile write" - no email scope - so an
+            # email claim is whatever the tenant chooses to include. Toyota's
+            # returns one; do not assume Subaru's does. Fall back to the subject
+            # (the account GUID), which is always present and is all this value
+            # has to be: stable and unique per account.
+            account_id = id_info.get("email") or id_info.get("sub")
+            if not account_id:
+                _LOGGER.error(
+                    "Token had neither an email nor a sub claim; claims present: %s",
+                    sorted(id_info),
+                )
+                errors["base"] = "unknown"
+                return None
+            if not id_info.get("email"):
+                _LOGGER.debug(
+                    "No email claim from %s; identifying account by sub instead",
+                    client.brand.name,
+                )
+
             return {
                 BRAND: client.brand.code,
                 "tokens": client.auth.get_tokens(),
-                "email": id_info["email"],
+                "email": account_id,
                 "username": self.user_info["username"],
                 "password": self.user_info["password"],
             }
@@ -90,7 +110,7 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error("Invalid Verification Code")
         except Exception:
             errors["base"] = "unknown"
-            _LOGGER.exception("Unknown error")
+            _LOGGER.exception("Unknown error setting up %s account", client.brand.name)
 
     @staticmethod
     def _unique_id(data):
