@@ -42,12 +42,29 @@ class OneAuth:
         self._updated_at = None
         self._device_id = None
         self.otp_callbacks = None
+        # Built lazily in _session(): aiohttp.CookieJar() requires a running
+        # event loop, and this class must stay constructible from sync code.
+        self._cookie_jar = None
         if initial_tokens:
             try:
                 self.set_tokens(initial_tokens)
             except (KeyError, TypeError):
                 # Malformed stored tokens just mean we re-authenticate.
                 _LOGGER.debug("Ignoring unusable stored tokens")
+
+    def _session(self):
+        """Session sharing one cookie jar across every call in the auth flow.
+
+        ForgeRock is clustered and pins a session to a single node with the
+        amlbcookie affinity cookie. The OTP flow spans two authorize() calls --
+        one to request the code, one to submit it -- and each opens its own
+        ClientSession. Without a jar outliving them, the second call carries no
+        affinity cookie, reaches a node that never issued our authId, and the
+        backend rejects a perfectly valid OTP as invalid.
+        """
+        if self._cookie_jar is None:
+            self._cookie_jar = aiohttp.CookieJar()
+        return aiohttp.ClientSession(cookie_jar=self._cookie_jar)
 
     async def authorize(self, username, password, otp=None):
         """Run the ForgeRock callback loop and return an authorization code.
@@ -57,7 +74,7 @@ class OneAuth:
         callbacks are stashed and returned; the caller re-invokes with `otp` set
         to resume the same session.
         """
-        async with aiohttp.ClientSession() as session:
+        async with self._session() as session:
             headers = {"Accept-API-Version": "resource=2.1, protocol=1.0"}
 
             data = self.otp_callbacks if otp is not None else {}
@@ -175,7 +192,8 @@ class OneAuth:
         )
 
     async def _token_request(self, data):
-        async with aiohttp.ClientSession() as session:
+        # Same jar: the token exchange belongs to the same pinned auth session.
+        async with self._session() as session:
             async with session.post(self.brand.access_token_url, data=data) as resp:
                 body = await resp.text()
                 if resp.status != 200:

@@ -278,6 +278,95 @@ class Validator:
         )
         return 0
 
+    async def run_two_phase(self, username, password):
+        """Reproduce the config flow's split-session OTP flow.
+
+        Home Assistant asks for the OTP in a separate step, so authorize() runs
+        twice, each in its own ClientSession. ForgeRock pins a session to one
+        cluster node with the amlbcookie affinity cookie, so unless a cookie jar
+        outlives both calls, phase two lands on a node that never issued our
+        authId and the OTP is rejected as invalid.
+
+        --no-shared-cookies drops the jar to demonstrate the failure.
+        """
+        shared = None if self.args.no_shared_cookies else aiohttp.CookieJar()
+        print(
+            "  cookie jar across phases: "
+            + ("NONE (reproducing the bug)" if shared is None else "shared (the fix)")
+        )
+
+        def new_session():
+            return aiohttp.ClientSession(
+                cookie_jar=shared if shared is not None else aiohttp.CookieJar()
+            )
+
+        headers = {"Accept-API-Version": "resource=2.1, protocol=1.0"}
+        data, stash = {}, None
+
+        # Phase 1: run until the backend asks for an OTP, then stop and close.
+        async with new_session() as session:
+            for _ in range(15):
+                asked = False
+                for cb in data.get("callbacks", []):
+                    prompt = cb["output"][0].get("value", "") if cb.get("output") else ""
+                    if cb["type"] == "NameCallback":
+                        if prompt == "User Name":
+                            cb["input"][0]["value"] = username
+                        elif prompt == "ui_locales":
+                            cb["input"][0]["value"] = "en-US"
+                    elif cb["type"] == "PasswordCallback":
+                        if prompt == "One Time Password":
+                            asked = True
+                            break
+                        if prompt == "Password":
+                            cb["input"][0]["value"] = password
+                    elif cb["type"] in ("ChoiceCallback", "ConfirmationCallback"):
+                        cb["input"][0]["value"] = 0
+                if asked:
+                    stash = data
+                    break
+                async with session.post(
+                    self.authenticate_url, json=data, headers=headers
+                ) as r:
+                    if r.status != 200:
+                        sys.exit(f"FAIL phase 1: HTTP {r.status}")
+                    data = json.loads(await r.text())
+                    if "tokenId" in data:
+                        print("  [!!] no OTP was requested; nothing to reproduce")
+                        return 0
+        print("  [ok] phase 1 complete, session closed")
+        if stash is None:
+            sys.exit("FAIL: never reached an OTP prompt")
+
+        otp = input("  One-time password: ").strip()
+        for cb in stash.get("callbacks", []):
+            prompt = cb["output"][0].get("value", "") if cb.get("output") else ""
+            if cb["type"] == "PasswordCallback" and prompt == "One Time Password":
+                cb["input"][0]["value"] = otp
+            elif cb["type"] == "ConfirmationCallback":
+                cb["input"][0]["value"] = 0
+
+        # Phase 2: brand-new session, exactly as the config flow does it.
+        async with new_session() as session:
+            async with session.post(
+                self.authenticate_url, json=stash, headers=headers
+            ) as r:
+                body = await r.text()
+                if r.status != 200:
+                    print(f"\n  [FAIL] phase 2 rejected: HTTP {r.status}")
+                    print(f"         {body[:200]}")
+                    print(
+                        "\n  This is the HA failure. The OTP was correct; the request\n"
+                        "  reached a node that never issued the authId."
+                    )
+                    return 1
+                out = json.loads(body)
+                if "tokenId" in out:
+                    print("\n  [ok] phase 2 accepted across separate sessions")
+                    return 0
+                print(f"\n  [FAIL] no tokenId; callbacks={[c['type'] for c in out.get('callbacks',[])]}")
+                return 1
+
     async def run(self):
         username = self.args.username or input("Username: ")
         password = self.args.password or getpass.getpass("Password: ")
@@ -288,6 +377,9 @@ class Validator:
         print(f"  user-agent      : {self.user_agent().split(' ')[0]}")
         bootstrap = self.brand["bootstrap"] and not self.args.no_bootstrap
         print(f"  /v4/account     : {'yes' if bootstrap else 'no'}\n")
+
+        if self.args.two_phase:
+            return await self.run_two_phase(username, password)
 
         async with aiohttp.ClientSession() as session:
             token_id = await self.authenticate(session, username, password)
@@ -350,6 +442,18 @@ def main():
     parser.add_argument("--brand", choices=["T", "S"], default="T")
     parser.add_argument("--username")
     parser.add_argument("--password", help="omit to be prompted securely")
+    parser.add_argument(
+        "--two-phase",
+        action="store_true",
+        help="reproduce Home Assistant's split-session OTP flow, where authorize "
+        "runs once to request the code and again to submit it",
+    )
+    parser.add_argument(
+        "--no-shared-cookies",
+        action="store_true",
+        help="with --two-phase, drop the cookie jar between phases to demonstrate "
+        "the ForgeRock affinity failure",
+    )
     parser.add_argument(
         "--matrix",
         action="store_true",
