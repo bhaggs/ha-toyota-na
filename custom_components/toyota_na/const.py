@@ -1,7 +1,7 @@
 from toyota_na.vehicle.base_vehicle import VehicleFeatures
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.components.sensor import SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import PERCENTAGE, UnitOfPressure
 
 from toyota_na.vehicle.base_vehicle import RemoteRequestCommand
@@ -307,21 +307,23 @@ SENSORS = [
         "subscription": True,
         "electric": True,
     },
+    # The API reports these as unix epoch seconds. Marking them TIMESTAMP makes
+    # Home Assistant render them as real times ("10 minutes ago") instead of a
+    # raw 1786402632.0. A timestamp sensor must not also carry a state_class --
+    # measurement statistics are meaningless on a clock reading.
     {
-        "state_class": SensorStateClass.MEASUREMENT,
-        "icon": "mdi:gauge",
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:clock-outline",
         "feature": VehicleFeatures.LastTimeStamp,
         "name": "Last Update Timestamp",
-        "unit": "",
         "subscription": False,
         "electric": False,
     },
     {
-        "state_class": SensorStateClass.MEASUREMENT,
-        "icon": "mdi:gauge",
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:clock-outline",
         "feature": VehicleFeatures.LastTirePressureTimeStamp,
         "name": "Last Tire Pressure Update Timestamp",
-        "unit": "",
         "subscription": False,
         "electric": False,
     },

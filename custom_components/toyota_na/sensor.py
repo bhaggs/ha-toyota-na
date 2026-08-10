@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
+import logging
 from typing import Any, Union, cast
 
 from toyota_na.vehicle.base_vehicle import ToyotaVehicle, VehicleFeatures
 from toyota_na.vehicle.entity_types.ToyotaNumeric import ToyotaNumeric
 
-from homeassistant.components.sensor import SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength
 from homeassistant.core import HomeAssistant
@@ -12,6 +14,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .base_entity import ToyotaNABaseEntity
 from .const import DOMAIN, SENSORS
+
+_LOGGER = logging.getLogger(__name__)
+
+# Epoch values above this are milliseconds, not seconds: as seconds it would be
+# the year 5138. The API is undocumented and has been inconsistent about units.
+_EPOCH_MS_THRESHOLD = 1e11
 
 
 async def async_setup_entry(
@@ -38,12 +46,29 @@ async def async_setup_entry(
                     continue
                 if vehicle.subscribed is False and cast(bool, entity_config["subscription"]):
                     continue
+
+                # .get() rather than [] because not every sensor carries every
+                # key: timestamps have a device_class and no unit or state_class.
+                # Indexing here is what broke the previous attempt at this - one
+                # missing key raised KeyError and took down the whole platform.
+                if entity_config.get("device_class") == SensorDeviceClass.TIMESTAMP:
+                    sensors.append(
+                        ToyotaTimestampSensor(
+                            cast(VehicleFeatures, entity_config["feature"]),
+                            cast(str, entity_config["icon"]),
+                            coordinator,
+                            entity_config["name"],
+                            vehicle.vin,
+                        )
+                    )
+                    continue
+
                 sensors.append(
                     ToyotaNumericSensor(
                         cast(VehicleFeatures, feature_sensor["feature"]),
                         cast(str, entity_config["icon"]),
-                        cast(str, entity_config["unit"]),
-                        cast(SensorStateClass, entity_config["state_class"]),
+                        cast(str, entity_config.get("unit", "")),
+                        cast(SensorStateClass, entity_config.get("state_class")),
                         coordinator,
                         entity_config["name"],
                         vehicle.vin,
@@ -51,6 +76,52 @@ async def async_setup_entry(
                 )
 
     async_add_devices(sensors, True)
+
+
+class ToyotaTimestampSensor(ToyotaNABaseEntity):
+    """A unix epoch reading rendered as an actual point in time.
+
+    Reports an ISO 8601 string rather than a datetime object. These entities
+    derive from CoordinatorEntity, not SensorEntity, so nothing converts a
+    datetime for us -- str() on one yields a space separator that Home
+    Assistant will not accept for a timestamp device class.
+    """
+
+    def __init__(self, vehicle_feature: VehicleFeatures, icon: str, *args: Any):
+        super().__init__(*args)
+        self._icon = icon
+        self._vehicle_feature = vehicle_feature
+
+    @property
+    def icon(self) -> str:
+        return self._icon
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.TIMESTAMP
+
+    @property
+    def state(self):
+        feat = cast(ToyotaNumeric, self.feature(self._vehicle_feature))
+        if feat is None or feat.value is None:
+            return None
+        try:
+            value = float(feat.value)
+        except (TypeError, ValueError):
+            _LOGGER.debug(
+                "Non-numeric timestamp %r for %s", feat.value, self.sensor_name
+            )
+            return None
+        if value >= _EPOCH_MS_THRESHOLD:
+            value /= 1000
+        try:
+            # Always UTC: the API gives no zone, and HA localizes for display.
+            return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+        except (OSError, OverflowError, ValueError):
+            _LOGGER.debug(
+                "Out-of-range timestamp %r for %s", feat.value, self.sensor_name
+            )
+            return None
 
 
 class ToyotaNumericSensor(ToyotaNABaseEntity):
