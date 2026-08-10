@@ -27,6 +27,13 @@ APPSYNC_API_KEY = "da2-zgeayo2qh5eo7cj6pmdwhwugze"
 RESOLVER_API_KEY = "pypIHG015k4ABHWbcI4G0a94F7cC0JDo1OynpAsG"
 APP_VERSION = "3.4.0"
 
+# aiohttp defaults to a 5 minute total timeout, which is far too long for a
+# coordinator that polls every 10 minutes: DataUpdateCoordinator skips a
+# scheduled refresh while one is still in flight, so a single stalled request
+# can wedge the whole integration until the entry is reloaded by hand. Fail
+# fast instead and let the next poll recover.
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
 
 # --- GraphQL Operations ---
 
@@ -87,7 +94,7 @@ class OneClient:
         endpoint = endpoint.lstrip("/")
         url = urljoin(API_GATEWAY, endpoint)
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
             async with session.request(method, url, headers=headers, **kwargs) as resp:
                 # Read the body once, before raise_for_status consumes our chance
                 # to. Truncated and at debug only: these bodies carry VIN,
@@ -360,7 +367,7 @@ class OneClient:
                 "variables": variables,
             }
         )
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
             async with session.post(
                 GRAPHQL_ENDPOINT, headers=headers, data=payload
             ) as resp:

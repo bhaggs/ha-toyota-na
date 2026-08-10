@@ -24,6 +24,9 @@ from .brands import CLIENT_ID, DEFAULT_BRAND, REDIRECT_URI, SCOPE, get_brand
 
 _LOGGER = logging.getLogger(__name__)
 
+# Bounded so a stalled login cannot hang a config flow or a coordinator poll.
+AUTH_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
 
 class OneAuth:
     """Token lifecycle for one account on one brand."""
@@ -64,7 +67,9 @@ class OneAuth:
         """
         if self._cookie_jar is None:
             self._cookie_jar = aiohttp.CookieJar()
-        return aiohttp.ClientSession(cookie_jar=self._cookie_jar)
+        return aiohttp.ClientSession(
+            cookie_jar=self._cookie_jar, timeout=AUTH_TIMEOUT
+        )
 
     async def authorize(self, username, password, otp=None):
         """Run the ForgeRock callback loop and return an authorization code.
