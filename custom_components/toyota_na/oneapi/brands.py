@@ -39,12 +39,13 @@ class BrandConfig:
 
     user_agent: str
 
-    requires_account_bootstrap: bool
-    """Whether GET v4/account must precede vehicle discovery.
+    bootstrap_on_empty: bool
+    """Whether to retry vehicle discovery after GET v4/account when it returns empty.
 
-    Subaru returns HTTP 200 with an empty payload from v2/vehicle/guid unless
-    the account has been touched first -- apparently server-side session
-    initialization specific to the Subaru flow.
+    Subaru was reported to need this call before v2/vehicle/guid would return
+    anything. Live testing against an active account did not reproduce it, so it
+    fires only on the empty-list symptom rather than on every call. See
+    OneClient.get_user_vehicle_list.
     """
 
     @property
@@ -60,12 +61,13 @@ class BrandConfig:
         return f"https://{self.auth_host}/oauth2/{REALM_PATH}/access_token"
 
     def headers(self) -> dict:
-        """Brand-scoping headers required on gateway and GraphQL requests.
+        """Brand-scoping headers sent on gateway and GraphQL requests.
 
-        X-APPBRAND is the one that gates vehicle discovery: without it, Subaru
-        auth succeeds but the vehicle list comes back empty. X-Brand-Id is sent
-        by the real app; whether the backend enforces it is unconfirmed, so it
-        is included for parity.
+        X-APPBRAND is the one that gates vehicle discovery, confirmed by live
+        testing: drop it and Subaru auth still succeeds but the vehicle list
+        comes back empty. X-Brand-Id is sent by the real app and was measured
+        as not load-bearing; it is kept for parity, on the theory that matching
+        the real client is cheap insurance if the backend ever tightens.
         """
         return {
             "X-BRAND": self.code,
@@ -82,7 +84,7 @@ TOYOTA = BrandConfig(
     user_agent=(
         "ToyotaOneApp/3.10.0 (com.toyota.oneapp; build:3100; Android 14) okhttp/4.12.0"
     ),
-    requires_account_bootstrap=False,
+    bootstrap_on_empty=False,
 )
 
 SUBARU = BrandConfig(
@@ -93,7 +95,7 @@ SUBARU = BrandConfig(
     user_agent=(
         "SubaruConnect/3.10.0 (com.subaru.oneapp; build:3100; Android 14) okhttp/4.12.0"
     ),
-    requires_account_bootstrap=True,
+    bootstrap_on_empty=True,
 )
 
 BRANDS = {brand.code: brand for brand in (TOYOTA, SUBARU)}

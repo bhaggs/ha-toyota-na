@@ -15,6 +15,10 @@ when you add the integration, and everything downstream behaves the same.
 > see [Credits](#credits). Subaru can change or
 > break any of it without notice. The Toyota flow is no more official, but it has
 > years of community use behind it; the Subaru path does not. Treat it accordingly.
+>
+> Login and vehicle discovery have been verified end-to-end against a real Solterra.
+> The per-vehicle data and remote-command endpoints are shared with the Toyota flow
+> and have not been separately exercised on a Subaru.
 
 ## Stable
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/widewing/ha-toyota-na?style=for-the-badge) ![GitHub Release Date](https://img.shields.io/github/release-date/widewing/ha-toyota-na?style=for-the-badge) ![GitHub Releases](https://img.shields.io/github/downloads/widewing/ha-toyota-na/latest/total?color=purple&label=%20release%20Downloads&style=for-the-badge) 
@@ -67,15 +71,27 @@ What actually differs per brand lives in one file,
 | Login tenant | `login.toyotadriverslogin.com` | `login.subarudriverslogin.com` |
 | `X-BRAND` / `X-APPBRAND` / `X-Brand-Id` | `T` | `S` |
 | User-Agent | `ToyotaOneApp` | `SubaruConnect` |
-| `GET v4/account` before vehicle discovery | not needed | required |
+| `GET v4/account` retry on empty discovery | no | yes |
 
 The OAuth realm, client ID, API keys, gateway host, GraphQL endpoint, and every
 endpoint path are identical across brands.
 
-`X-APPBRAND` is the one that trips people up: without it, Subaru login succeeds and
-`v2/vehicle/guid` returns HTTP 200 with an empty list. The `v4/account` call has the
-same symptom — it appears to initialize server-side session state that the Subaru
-flow needs and the Toyota flow does not.
+`X-APPBRAND` is the one that trips people up, and it is the one requirement measured
+against a live Subaru account: without it, login still succeeds and
+`v2/vehicle/guid` returns HTTP 200 with an empty list.
+
+`X-Brand-Id` and the brand User-Agent were both measured as *not* enforced. They are
+sent anyway, to match what the real app does, on the theory that looking like the
+real client is cheap insurance if the backend ever tightens.
+
+The `v4/account` bootstrap is the interesting one. It was reported as required before
+`v2/vehicle/guid` would return anything, but live testing on an active account did
+not reproduce that — discovery worked on a fresh session with no bootstrap at all.
+The likely explanation is that the call initializes account state once and
+permanently, so any account that has used the SubaruConnect app is already
+initialized. Rather than guess, the integration calls it only as a retry when
+discovery comes back empty: an established account pays nothing, a fresh one still
+gets rescued.
 
 ### Running both brands at once
 

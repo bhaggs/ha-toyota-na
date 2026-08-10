@@ -77,19 +77,22 @@ class Validator:
         self.access_token = None
         self.guid = None
 
-    def brand_headers(self):
+    def brand_headers(self, appbrand=None, brand_id=None):
         """The headers under test. Each can be suppressed to prove necessity."""
+        appbrand = not self.args.no_appbrand if appbrand is None else appbrand
+        brand_id = not self.args.no_brand_id if brand_id is None else brand_id
         headers = {"X-BRAND": self.args.brand}
-        if not self.args.no_appbrand:
+        if appbrand:
             headers["X-APPBRAND"] = self.args.brand
-        if not self.args.no_brand_id:
+        if brand_id:
             headers["X-Brand-Id"] = self.args.brand
         return headers
 
-    def user_agent(self):
-        if self.args.user_agent == "toyota":
+    def user_agent(self, which=None):
+        which = which or self.args.user_agent
+        if which == "toyota":
             return BRANDS["T"]["user_agent"]
-        if self.args.user_agent == "subaru":
+        if which == "subaru":
             return BRANDS["S"]["user_agent"]
         return self.brand["user_agent"]
 
@@ -190,7 +193,7 @@ class Validator:
         self.guid = claims["sub"]
         return claims
 
-    async def api_get(self, session, endpoint):
+    async def api_get(self, session, endpoint, brand_headers=None, user_agent=None):
         """GET against the shared ctpa-oneapi gateway. Returns (status, payload)."""
         headers = {
             "AUTHORIZATION": f"Bearer {self.access_token}",
@@ -200,9 +203,9 @@ class Validator:
             "x-region": "US",
             "X-APPVERSION": "3.4.0",
             "X-LOCALE": "en-US",
-            "User-Agent": self.user_agent(),
+            "User-Agent": user_agent or self.user_agent(),
             "Accept": "application/json",
-            **self.brand_headers(),
+            **(brand_headers if brand_headers is not None else self.brand_headers()),
         }
         async with session.get(API_GATEWAY + endpoint, headers=headers) as resp:
             body = await resp.text()
@@ -211,6 +214,69 @@ class Validator:
                 return resp.status, None
             parsed = json.loads(body)
             return resp.status, parsed.get("payload", parsed)
+
+    async def run_matrix(self, session):
+        """Probe every open question on one login, since each login costs an OTP.
+
+        Order matters. The bootstrap appears to initialize server-side session
+        state, and that state may persist for the rest of the session -- so the
+        no-bootstrap case has to run FIRST, before any v4/account call
+        contaminates it. Everything after assumes bootstrap has happened.
+        """
+        print("  Running permutations on this one login.\n")
+        results = []
+
+        async def probe(label, *, bootstrap, appbrand=True, brand_id=True, ua=None):
+            if bootstrap:
+                await self.api_get(session, "v4/account")
+            status, vehicles = await self.api_get(
+                session,
+                "v2/vehicle/guid",
+                brand_headers=self.brand_headers(appbrand=appbrand, brand_id=brand_id),
+                user_agent=self.user_agent(ua),
+            )
+            n = len(vehicles) if vehicles is not None else None
+            verdict = "FAIL" if not n else f"{n} vehicle(s)"
+            print(f"    {label:<34} HTTP {status}  {verdict}")
+            results.append((label, n))
+            return n
+
+        # Must be first: no v4/account has been called yet in this session.
+        no_bootstrap = await probe("no bootstrap, all headers", bootstrap=False)
+        baseline = await probe("bootstrap + all headers", bootstrap=True)
+        no_appbrand = await probe(
+            "bootstrap, no X-APPBRAND", bootstrap=True, appbrand=False
+        )
+        no_brand_id = await probe(
+            "bootstrap, no X-Brand-Id", bootstrap=True, brand_id=False
+        )
+        wrong_ua = await probe("bootstrap, Toyota User-Agent", bootstrap=True, ua="toyota")
+
+        print("\n  --- conclusions ---")
+        if not baseline:
+            print("    Baseline failed; everything below is meaningless.")
+            return 1
+        print(
+            "    v4/account bootstrap : "
+            + ("REQUIRED" if not no_bootstrap else "not required (worked without it)")
+        )
+        print(
+            "    X-APPBRAND           : "
+            + ("REQUIRED" if not no_appbrand else "not load-bearing")
+        )
+        print(
+            "    X-Brand-Id           : "
+            + ("REQUIRED" if not no_brand_id else "not load-bearing")
+        )
+        print(
+            "    Brand User-Agent     : "
+            + ("REQUIRED" if not wrong_ua else "not checked by the backend")
+        )
+        print(
+            "\n  Anything marked 'not load-bearing' can be dropped from\n"
+            "  oneapi/brands.py; anything REQUIRED is confirmed and should stay.\n"
+        )
+        return 0
 
     async def run(self):
         username = self.args.username or input("Username: ")
@@ -232,6 +298,10 @@ class Validator:
 
             claims = await self.request_tokens(session, code)
             print(f"  [ok] tokens (guid {claims['sub'][:8]}...)")
+
+            if self.args.matrix:
+                print()
+                return await self.run_matrix(session)
 
             if bootstrap:
                 status, payload = await self.api_get(session, "v4/account")
@@ -271,6 +341,12 @@ def main():
     parser.add_argument("--brand", choices=["T", "S"], default="T")
     parser.add_argument("--username")
     parser.add_argument("--password", help="omit to be prompted securely")
+    parser.add_argument(
+        "--matrix",
+        action="store_true",
+        help="probe every header/bootstrap permutation on a single login, so "
+        "answering all the open questions costs one OTP instead of five",
+    )
     parser.add_argument(
         "--no-appbrand",
         action="store_true",

@@ -123,17 +123,32 @@ class OneClient:
     # --- Account and vehicle discovery ---
 
     async def get_user_vehicle_list(self):
-        """List the account's vehicles, bootstrapping the session if the brand needs it.
+        """List the account's vehicles, bootstrapping only if the list comes back empty.
 
-        Subaru returns HTTP 200 with an empty payload unless v4/account is called
-        first. Best-effort: a failed bootstrap should not take down the config
-        entry, since the vehicle list may well still work.
+        Subaru was reported to need GET v4/account before v2/vehicle/guid would
+        return anything. Live testing against an active account did not reproduce
+        that: discovery worked on a fresh session with no bootstrap at all. The
+        likely explanation is that v4/account initializes account state once and
+        permanently, so an account that has ever used the SubaruConnect app is
+        already initialized - which the reporting accounts may not have been.
+
+        So it is kept, but only as a retry on the empty-list symptom it was
+        reported to fix. An already-initialized account pays nothing; a fresh one
+        still gets rescued. Best-effort throughout, since a failed bootstrap
+        should not take down the config entry.
         """
-        if self.brand.requires_account_bootstrap:
-            try:
-                await self.api_get("v4/account")
-            except Exception as e:
-                _LOGGER.debug("Account bootstrap failed, continuing: %s", e)
+        vehicles = await self.api_get("v2/vehicle/guid")
+        if vehicles or not self.brand.bootstrap_on_empty:
+            return vehicles
+
+        _LOGGER.debug(
+            "%s returned no vehicles; retrying after account bootstrap",
+            self.brand.name,
+        )
+        try:
+            await self.api_get("v4/account")
+        except Exception as e:
+            _LOGGER.debug("Account bootstrap failed, continuing: %s", e)
         return await self.api_get("v2/vehicle/guid")
 
     async def get_vehicle_detail(self, vin):
