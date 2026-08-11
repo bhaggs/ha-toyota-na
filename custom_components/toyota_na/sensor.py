@@ -7,7 +7,7 @@ from toyota_na.vehicle.entity_types.ToyotaNumeric import ToyotaNumeric
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfLength
+from homeassistant.const import EntityCategory, UnitOfLength
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -70,6 +70,7 @@ async def async_setup_entry(
                         cast(str, entity_config.get("unit", "")),
                         cast(SensorStateClass, entity_config.get("state_class")),
                         cast(SensorDeviceClass, entity_config.get("device_class")),
+                        entity_config.get("entity_category"),
                         coordinator,
                         entity_config["name"],
                         vehicle.vin,
@@ -136,12 +137,14 @@ class ToyotaNumericSensor(ToyotaNABaseEntity):
         unit_of_measurement: str,
         state_class: Union[SensorStateClass, str],
         device_class: Union[SensorDeviceClass, str, None] = None,
+        entity_category: Union[EntityCategory, None] = None,
         *args: Any,
     ):
         super().__init__(*args)
         self._icon = icon
         self._state_class = state_class
         self._device_class = device_class
+        self._entity_category = entity_category
         self._unit_of_measurement = unit_of_measurement
         self._vehicle_feature = vehicle_feature
 
@@ -160,6 +163,10 @@ class ToyotaNumericSensor(ToyotaNABaseEntity):
     @property
     def device_class(self):
         return self._device_class
+
+    @property
+    def entity_category(self):
+        return self._entity_category
 
     @property
     def state_class(self):

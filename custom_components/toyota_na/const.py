@@ -2,7 +2,12 @@ from toyota_na.vehicle.base_vehicle import VehicleFeatures
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfPressure
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfLength,
+    UnitOfPressure,
+)
 
 from toyota_na.vehicle.base_vehicle import RemoteRequestCommand
 
@@ -272,7 +277,11 @@ SENSORS = [
         "electric": False,
     },
     {
-        "state_class": SensorStateClass.MEASUREMENT,
+        # Maintenance metadata rather than vehicle state, so it belongs in the
+        # device page's Diagnostic section, not next to range and door status.
+        # No state_class on purpose: this is a threshold that sits flat and then
+        # steps at each service, so long-term statistics over it are noise.
+        "entity_category": EntityCategory.DIAGNOSTIC,
         "icon": "mdi:wrench-clock",
         "feature": VehicleFeatures.NextService,
         "name": "Next Service",
