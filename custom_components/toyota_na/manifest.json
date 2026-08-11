@@ -3,10 +3,10 @@
     "domain": "toyota_na",
     "name": "Toyota / Subaru (North America)",
     "config_flow": true,
-    "documentation": "https://github.com/widewing/ha_toyota_na",
-    "codeowners": ["@vanstinator, @widewing"],
+    "documentation": "https://github.com/bhaggs/ha-toyota-na",
+    "codeowners": ["@bhaggs", "@vanstinator", "@widewing"],
     "requirements": ["toyota-na==2.1.1"],
-    "issue_tracker": "https://github.com/widewing/ha-toyota-na/issues",
+    "issue_tracker": "https://github.com/bhaggs/ha-toyota-na/issues",
     "version": "2.7.0-subaru.6",
     "iot_class": "cloud_polling"
 }
