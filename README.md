@@ -46,16 +46,18 @@ Sensors:
 * EV Connector Status
 * EV Charging Status
 
-Buttons and services (all require a Remote Subscription):
-* Lock/Unlock Doors
-* Remote Start/Stop Engine
+Controls and services (all require a Remote Subscription):
+* Lock/Unlock Doors (lock entity)
+* Remote Start/Stop (switch; reports whether the vehicle is running and for how
+  much longer. On an EV this is climate preconditioning)
 * Hazards On (momentary; the vehicle auto-offs after ~60s)
 * Lights On/Off (17CYPLUS and later)
 * Buzzer (17CYPLUS and later)
 * Refresh Data
 
-Each is available both as a button entity on the vehicle's device page and as a
-service, so existing automations built on the services keep working.
+Each is available as an entity on the vehicle's device page and as a service, so
+existing automations built on the services keep working. Stateful features are
+switches, one-shot commands are buttons.
 
 ## Subaru support
 

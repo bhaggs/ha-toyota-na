@@ -48,26 +48,13 @@ COMMAND_MAP = {
 # not created on those vehicles, since send_command would raise on press.
 CY17PLUS_ONLY_ACTIONS = {BUZZER, LIGHTS_ON, LIGHTS_OFF}
 
-# One-shot remote commands. These have always existed as services, but a service
-# has no entity, so nothing for them appeared on the device page - only the lock,
-# which is a real entity. Buttons give them a presence in the UI.
+# One-shot remote commands. Buttons suit these because they are stateless: the
+# vehicle reports nothing to read back afterwards. Remote start is deliberately
+# not here - it is stateful, so it lives in switch.py.
 #
 # All of them require a remote subscription, so buttons are only created for
 # subscribed vehicles, matching how lock.py handles it.
 BUTTONS = [
-    {
-        "action": ENGINE_START,
-        "icon": "mdi:engine",
-        # On an EV this is climate preconditioning rather than an engine, but
-        # the backend command and the existing service are both named for the
-        # ICE behaviour.
-        "name": "Engine Start",
-    },
-    {
-        "action": ENGINE_STOP,
-        "icon": "mdi:engine-off",
-        "name": "Engine Stop",
-    },
     {
         # One button, not a pair. The hazards are momentary: they auto-off after
         # roughly a minute, and hazard-off was measured to have no observable
