@@ -398,7 +398,7 @@ SENSORS = [
     },
     {
         "state_class": SensorStateClass.MEASUREMENT,
-        "icon": "mdi:ev-plug-type1",
+        "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.PlugStatus,
         "name": "Plug Status",
         "unit": "",
@@ -430,7 +430,7 @@ SENSORS = [
     },
     {
         "state_class": SensorStateClass.MEASUREMENT,
-        "icon": "mdi:ev-plug-type1",
+        "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.ChargeType,
         "name": "Charge Type",
         "unit": "",
@@ -442,7 +442,7 @@ SENSORS = [
         # a latch state are meaningless, and Home Assistant rejects a numeric
         # state_class on a non-numeric value.
         "state_class": None,
-        "icon": "mdi:ev-plug-type1",
+        "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.ConnectorStatus,
         "name": "Connector Status",
         "unit": "",
