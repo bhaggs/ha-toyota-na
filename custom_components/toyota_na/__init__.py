@@ -34,7 +34,7 @@ from .patch_vehicle import get_vehicles
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import device_registry as dr, service
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -118,6 +118,46 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
 
         return
 
+    @service.verify_domain_control(DOMAIN)
+    async def async_send_command(service_call: ServiceCall) -> None:
+        """Send a raw command string to the vehicle.
+
+        Diagnostic escape hatch. The gateway's command vocabulary is
+        undocumented and differs between brands - Subaru's app offers a lights
+        control whose command string is not in any list we have - so this exists
+        to identify one without shipping a release per guess. An unrecognised
+        command comes back as HTTP 400, which is the signal you are after.
+        """
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get(service_call.data["vehicle"])
+        command = service_call.data["command"]
+
+        if device is None or not device.config_entries:
+            raise HomeAssistantError("Vehicle device not found")
+
+        for entry_id in device.config_entries:
+            entry_data = hass.data[DOMAIN].get(entry_id)
+            if not entry_data:
+                continue
+            client = entry_data["toyota_na_client"]
+            for identifier in device.identifiers:
+                if identifier[0] != DOMAIN:
+                    continue
+                vin = identifier[1]
+                _LOGGER.info(
+                    "Sending raw command %r to vehicle ...%s", command, vin[-4:]
+                )
+                try:
+                    await client.remote_request_17cyplus(vin, command)
+                except Exception as e:
+                    raise HomeAssistantError(
+                        f"Command {command!r} rejected: {e}"
+                    ) from e
+                _LOGGER.warning("Raw command %r was accepted", command)
+                return
+
+        raise HomeAssistantError("No loaded config entry for that vehicle")
+
     hass.services.async_register(DOMAIN, ENGINE_START, async_service_handle)
     hass.services.async_register(DOMAIN, ENGINE_STOP, async_service_handle)
     hass.services.async_register(DOMAIN, HAZARDS_ON, async_service_handle)
@@ -125,6 +165,7 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
     hass.services.async_register(DOMAIN, DOOR_LOCK, async_service_handle)
     hass.services.async_register(DOMAIN, DOOR_UNLOCK, async_service_handle)
     hass.services.async_register(DOMAIN, REFRESH, async_service_handle)
+    hass.services.async_register(DOMAIN, SEND_COMMAND, async_send_command)
 
     return True
 

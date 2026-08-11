@@ -48,6 +48,8 @@ COMMAND_MAP = {
 # not created on those vehicles, since send_command would raise on press.
 CY17PLUS_ONLY_ACTIONS = {BUZZER, LIGHTS_ON, LIGHTS_OFF}
 
+SEND_COMMAND = "send_command"
+
 # One-shot remote commands. Buttons suit these because they are stateless: the
 # vehicle reports nothing to read back afterwards. Remote start is deliberately
 # not here - it is stateful, so it lives in switch.py.
@@ -64,22 +66,12 @@ BUTTONS = [
         # broken everywhere, only never proven working.
         "action": HAZARDS_ON,
         "icon": "mdi:hazard-lights",
-        "name": "Hazards On",
+        "name": "Hazards",
     },
     {
         "action": BUZZER,
         "icon": "mdi:bullhorn",
         "name": "Buzzer",
-    },
-    {
-        "action": LIGHTS_ON,
-        "icon": "mdi:car-light-high",
-        "name": "Lights On",
-    },
-    {
-        "action": LIGHTS_OFF,
-        "icon": "mdi:car-light-dimmed",
-        "name": "Lights Off",
     },
     {
         "action": REFRESH,

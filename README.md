@@ -50,14 +50,19 @@ Controls and services (all require a Remote Subscription):
 * Lock/Unlock Doors (lock entity)
 * Remote Start/Stop (switch; reports whether the vehicle is running and for how
   much longer. On an EV this is climate preconditioning)
-* Hazards On (momentary; the vehicle auto-offs after ~60s)
-* Lights On/Off (17CYPLUS and later)
+* Hazards (momentary; the vehicle auto-offs after ~60s)
 * Buzzer (17CYPLUS and later)
 * Refresh Data
 
 Each is available as an entity on the vehicle's device page and as a service, so
 existing automations built on the services keep working. Stateful features are
 switches, one-shot commands are buttons.
+
+There is also a `toyota_na.send_command` service that sends an arbitrary command
+string to the vehicle. The gateway's command vocabulary is undocumented and
+differs between brands, so this exists to identify commands the integration does
+not yet know: an unrecognised command returns HTTP 400. The SubaruConnect app's
+lights control is one such unknown - `light-on` is rejected.
 
 ## Subaru support
 

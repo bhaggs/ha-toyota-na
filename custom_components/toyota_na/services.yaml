@@ -68,3 +68,26 @@ refresh:
       selector:
         device:
           integration: toyota_na
+send_command:
+  name: Send raw command (advanced)
+  description:
+    Send an arbitrary command string straight to the vehicle. Diagnostic tool for
+    identifying commands the integration does not yet know - the gateway's
+    vocabulary is undocumented and differs between brands. An unrecognised
+    command returns HTTP 400. Be deliberate about what you send; the vocabulary
+    includes things like power-window-open.
+  fields:
+    vehicle:
+      description:
+        Device (vehicle) to send the command to.
+      required: true
+      selector:
+        device:
+          integration: toyota_na
+    command:
+      description:
+        Raw command string, for example "buzzer-warning" or "sound-horn".
+      required: true
+      example: buzzer-warning
+      selector:
+        text:
