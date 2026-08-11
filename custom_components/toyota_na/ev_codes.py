@@ -24,6 +24,30 @@ charging as such - the connector stays latched while plugged in and live.
 CONNECTOR_STATUS_CHARGING = 5
 """The value the charging binary sensor is derived from."""
 
+UNAVAILABLE_UINT16 = 65535
+"""0xFFFF, the "not applicable" sentinel for 16-bit fields.
+
+Observed on a Solterra: remainingChargeTime reads 65535 while unplugged. Taken
+at face value it renders as a real reading - 45 days or 18 hours depending on
+the unit - and would poison any statistics derived from it.
+"""
+
+
+def numeric(value):
+    """Numeric reading with the not-applicable sentinel turned into None.
+
+    None reaches Home Assistant as "unknown", which is what an inapplicable
+    reading should look like.
+    """
+    if value is None:
+        return None
+    try:
+        if int(value) == UNAVAILABLE_UINT16:
+            return None
+    except (TypeError, ValueError):
+        pass
+    return value
+
 
 def decode(value, table):
     """Look up a code, tolerating the string digits the API sometimes returns.

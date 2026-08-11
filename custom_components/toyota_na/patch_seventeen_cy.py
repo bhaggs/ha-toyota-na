@@ -200,7 +200,9 @@ class SeventeenCYToyotaVehicle(ToyotaVehicle):
         self._features[VehicleFeatures.ChargeDistanceAC] = ToyotaNumeric(chargeInfo.get("evDistanceAC"), chargeInfo.get("evDistanceUnit"))
         self._features[VehicleFeatures.ChargeLevel] = ToyotaNumeric(chargeInfo.get("chargeRemainingAmount"), "%")
         self._features[VehicleFeatures.PlugStatus] = ToyotaNumeric(chargeInfo.get("plugStatus"), "")
-        self._features[VehicleFeatures.RemainingChargeTime] = ToyotaNumeric(chargeInfo.get("remainingChargeTime"), "")
+        self._features[VehicleFeatures.RemainingChargeTime] = ToyotaNumeric(
+            ev_codes.numeric(chargeInfo.get("remainingChargeTime")), ""
+        )
         self._features[VehicleFeatures.EvTravelableDistance] = ToyotaNumeric(chargeInfo.get("evTravelableDistance"), "")
         self._features[VehicleFeatures.ChargeType] = ToyotaNumeric(chargeInfo.get("chargeType"), "")
         connector_status = chargeInfo.get("connectorStatus")
