@@ -34,7 +34,7 @@ few brand-scoped request headers — Subaru's connected-services platform is
 supplied by Toyota.
 
 So Subaru support here is *parity through a shared backend*, not a separate
-implementation. Whatever works for a Toyota EV works the same way for a Solterra.
+implementation. Whatever works for a Toyota EV works the same way for a Solterra, Trailseeker, or Uncharted.
 
 Everything that differs lives in one file,
 [`oneapi/brands.py`](custom_components/toyota_na/oneapi/brands.py):
@@ -49,21 +49,9 @@ Everything that differs lives in one file,
 The OAuth realm, client ID, API keys, gateway host, GraphQL endpoint, and every
 endpoint path are identical across brands.
 
-`X-APPBRAND` is the one that trips people up, and the one requirement measured
-against a live Subaru account: without it, login still succeeds but
-`v2/vehicle/guid` returns HTTP 200 with an empty list.
-
-`X-Brand-Id` and the brand User-Agent both measured as *not* enforced. They are
-sent anyway to match the real app, on the theory that looking like the real
-client is cheap insurance if the backend tightens.
-
-The `v4/account` bootstrap is the interesting one. It was reported as required
-before `v2/vehicle/guid` would return anything, but live testing on an active
-account did not reproduce that — discovery worked on a fresh session with no
-bootstrap at all. Most likely the call initializes account state once and
-permanently, so any account that has used the app is already initialized. Rather
-than guess, it is called only as a retry when discovery comes back empty: an
-established account pays nothing, a fresh one still gets rescued.
+`X-APPBRAND` is the one that matters: without it, login still succeeds but
+`v2/vehicle/guid` returns an empty list. Why each of the others is sent, and what
+was measured versus assumed, is documented in the code.
 
 ## Installation
 
@@ -89,7 +77,7 @@ and trunk lock state; current and last-parked location; odometer, speed, trip A
 and B, fuel level, distance to empty; tire pressures including spare; next
 service; last-update timestamps.
 
-**EV** — battery level (also shown in the device header), range with and without
+**EV** — battery level, range with and without
 climate, travelable distance, charging state, connector state, plug state, charge
 type, remaining charge time.
 
