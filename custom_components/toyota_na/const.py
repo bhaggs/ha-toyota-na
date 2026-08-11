@@ -38,6 +38,45 @@ COMMAND_MAP = {
     REFRESH: RemoteRequestCommand.Refresh,
 }
 
+# One-shot remote commands. These have always existed as services, but a service
+# has no entity, so nothing for them appeared on the device page - only the lock,
+# which is a real entity. Buttons give them a presence in the UI.
+#
+# All of them require a remote subscription, so buttons are only created for
+# subscribed vehicles, matching how lock.py handles it.
+BUTTONS = [
+    {
+        "action": ENGINE_START,
+        "icon": "mdi:engine",
+        # On an EV this is climate preconditioning rather than an engine, but
+        # the backend command and the existing service are both named for the
+        # ICE behaviour.
+        "name": "Engine Start",
+    },
+    {
+        "action": ENGINE_STOP,
+        "icon": "mdi:engine-off",
+        "name": "Engine Stop",
+    },
+    {
+        "action": HAZARDS_ON,
+        "icon": "mdi:alarm-light",
+        "name": "Hazards On",
+    },
+    {
+        "action": HAZARDS_OFF,
+        "icon": "mdi:alarm-light-off",
+        "name": "Hazards Off",
+    },
+    {
+        "action": REFRESH,
+        "icon": "mdi:refresh",
+        # Unlike the others this wakes the telematics unit to upload fresh
+        # state, so it draws on the 12V battery. See issue #2.
+        "name": "Refresh Data",
+    },
+]
+
 BINARY_SENSORS = [
     {
         "device_class": BinarySensorDeviceClass.DOOR,
