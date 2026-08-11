@@ -157,8 +157,15 @@ class ToyotaNumericSensor(ToyotaNABaseEntity):
     @property
     def state(self):
         feat = cast(ToyotaNumeric, self.feature(self._vehicle_feature))
-        if feat:
-            return feat.value
+        if not feat:
+            return None
+        value = feat.value
+        # The API reports whole numbers as floats, so a range reads "233.0 mi".
+        # Narrowing only when the fraction is zero keeps any real decimal the
+        # backend might send, unlike pinning display precision to 0.
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        return value
 
     @property
     def device_class(self):
