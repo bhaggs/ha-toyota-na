@@ -81,6 +81,11 @@ class RemoteRequestCommand(Enum):
     HazardsOn = auto()
     HazardsOff = auto()
     Refresh = auto()
+    # 17CYPLUS and later only. The legacy 17CY protocol takes a different
+    # command/value pair and has no equivalent for these.
+    BuzzerWarning = auto()
+    LightsOn = auto()
+    LightsOff = auto()
 
 
 class ToyotaVehicle(ABC):

@@ -16,9 +16,8 @@ when you add the integration, and everything downstream behaves the same.
 > break any of it without notice. The Toyota flow is no more official, but it has
 > years of community use behind it; the Subaru path does not. Treat it accordingly.
 >
-> Login and vehicle discovery have been verified end-to-end against a real Solterra.
-> The per-vehicle data and remote-command endpoints are shared with the Toyota flow
-> and have not been separately exercised on a Subaru.
+> Login, vehicle discovery, EV telemetry, and remote commands have all been verified
+> end-to-end against a real Solterra.
 
 ## Stable
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/widewing/ha-toyota-na?style=for-the-badge) ![GitHub Release Date](https://img.shields.io/github/release-date/widewing/ha-toyota-na?style=for-the-badge) ![GitHub Releases](https://img.shields.io/github/downloads/widewing/ha-toyota-na/latest/total?color=purple&label=%20release%20Downloads&style=for-the-badge) 
@@ -35,8 +34,6 @@ Sensors:
 * Tire Pressure
 * Fuel Level
 * Odometer
-* Oil Status
-* Key Fob Battery Status
 * Last Update
 * Last Tire Pressure Update
 * Speed
@@ -49,11 +46,16 @@ Sensors:
 * EV Connector Status
 * EV Charging Status
 
-Services:
-* Lock/Unlock Doors (Remote Subscription Required)
-* Remote Start/Stop Engine (Remote Subscription Required)
-* Hazards On/Off (Remote Subscription Required)
+Buttons and services (all require a Remote Subscription):
+* Lock/Unlock Doors
+* Remote Start/Stop Engine
+* Hazards On/Off
+* Lights On/Off (17CYPLUS and later)
+* Buzzer (17CYPLUS and later)
 * Refresh Data
+
+Each is available both as a button entity on the vehicle's device page and as a
+service, so existing automations built on the services keep working.
 
 ## Subaru support
 

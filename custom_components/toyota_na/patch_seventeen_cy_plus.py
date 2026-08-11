@@ -30,6 +30,12 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         RemoteRequestCommand.HazardsOn: "hazard-on",
         RemoteRequestCommand.HazardsOff: "hazard-off",
         RemoteRequestCommand.Refresh: "refresh",
+        RemoteRequestCommand.BuzzerWarning: "buzzer-warning",
+        # The gateway documents buzzer-warning; the light commands are inferred
+        # from the naming pattern of the documented set (hazard-on/hazard-off,
+        # power-window-on/power-window-off) and are not confirmed.
+        RemoteRequestCommand.LightsOn: "light-on",
+        RemoteRequestCommand.LightsOff: "light-off",
     }
 
     #  We'll parse these keys out in the parser by mapping the category and section types to a string literal

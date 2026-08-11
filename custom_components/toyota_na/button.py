@@ -9,7 +9,7 @@ import asyncio
 import logging
 from typing import Any
 
-from toyota_na.vehicle.base_vehicle import ToyotaVehicle
+from toyota_na.vehicle.base_vehicle import ApiVehicleGeneration, ToyotaVehicle
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -19,7 +19,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .base_entity import ToyotaNABaseEntity
-from .const import BUTTONS, COMMAND_MAP, DOMAIN, REFRESH
+from .const import BUTTONS, COMMAND_MAP, CY17PLUS_ONLY_ACTIONS, DOMAIN, REFRESH
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,7 +45,13 @@ async def async_setup_entry(
         # command would be refused, so offering the button would be misleading.
         if vehicle.subscribed is False:
             continue
+        # The legacy 17CY protocol sends a different command/value pair and has
+        # no equivalent for the buzzer or lights, so send_command would raise on
+        # press. Leave those buttons off rather than offer a broken control.
+        legacy = vehicle.generation == ApiVehicleGeneration.CY17
         for button in BUTTONS:
+            if legacy and button["action"] in CY17PLUS_ONLY_ACTIONS:
+                continue
             buttons.append(
                 ToyotaButton(
                     button["action"],
