@@ -14,6 +14,8 @@ from toyota_na.vehicle.entity_types.ToyotaNumeric import ToyotaNumeric
 from toyota_na.vehicle.entity_types.ToyotaOpening import ToyotaOpening
 from toyota_na.vehicle.entity_types.ToyotaRemoteStart import ToyotaRemoteStart
 
+from . import ev_codes
+
 _LOGGER = logging.getLogger(__name__)
 
 class SeventeenCYToyotaVehicle(ToyotaVehicle):
@@ -201,8 +203,13 @@ class SeventeenCYToyotaVehicle(ToyotaVehicle):
         self._features[VehicleFeatures.RemainingChargeTime] = ToyotaNumeric(chargeInfo.get("remainingChargeTime"), "")
         self._features[VehicleFeatures.EvTravelableDistance] = ToyotaNumeric(chargeInfo.get("evTravelableDistance"), "")
         self._features[VehicleFeatures.ChargeType] = ToyotaNumeric(chargeInfo.get("chargeType"), "")
-        self._features[VehicleFeatures.ConnectorStatus] = ToyotaNumeric(chargeInfo.get("connectorStatus"), "")
-        self._features[VehicleFeatures.ChargingStatus] = ToyotaOpening(chargeInfo.get("connectorStatus") != 5)
+        connector_status = chargeInfo.get("connectorStatus")
+        self._features[VehicleFeatures.ConnectorStatus] = ToyotaNumeric(
+            ev_codes.connector_status(connector_status), ""
+        )
+        self._features[VehicleFeatures.ChargingStatus] = ToyotaOpening(
+            connector_status != ev_codes.CONNECTOR_STATUS_CHARGING
+        )
 
     #
     # vehicle_health_status

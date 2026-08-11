@@ -446,7 +446,10 @@ SENSORS = [
         "electric": True,
     },
     {
-        "state_class": SensorStateClass.MEASUREMENT,
+        # ev_codes decodes this to a string, so no state_class: statistics over
+        # a latch state are meaningless, and Home Assistant rejects a numeric
+        # state_class on a non-numeric value.
+        "state_class": None,
         "icon": "mdi:ev-plug-type1",
         "feature": VehicleFeatures.ConnectorStatus,
         "name": "Connector Status",
