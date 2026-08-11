@@ -51,6 +51,7 @@ from .const import (
     DOOR_LOCK,
     DOOR_UNLOCK,
     REFRESH,
+    SEND_COMMAND,
     UPDATE_INTERVAL,
     REFRESH_STATUS_INTERVAL
 )
