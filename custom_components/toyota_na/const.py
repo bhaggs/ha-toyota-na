@@ -69,14 +69,15 @@ BUTTONS = [
         "name": "Engine Stop",
     },
     {
+        # One button, not a pair. The hazards are momentary: they auto-off after
+        # roughly a minute, and hazard-off was measured to have no observable
+        # effect on a real vehicle. Toyota's own app offers no manual off either,
+        # and SubaruConnect shows a single hazards control. The hazards_off
+        # service is still registered for automations - it has never been proven
+        # broken everywhere, only never proven working.
         "action": HAZARDS_ON,
-        "icon": "mdi:alarm-light",
+        "icon": "mdi:hazard-lights",
         "name": "Hazards On",
-    },
-    {
-        "action": HAZARDS_OFF,
-        "icon": "mdi:alarm-light-off",
-        "name": "Hazards Off",
     },
     {
         "action": BUZZER,

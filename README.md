@@ -49,7 +49,7 @@ Sensors:
 Buttons and services (all require a Remote Subscription):
 * Lock/Unlock Doors
 * Remote Start/Stop Engine
-* Hazards On/Off
+* Hazards On (momentary; the vehicle auto-offs after ~60s)
 * Lights On/Off (17CYPLUS and later)
 * Buzzer (17CYPLUS and later)
 * Refresh Data
