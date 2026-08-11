@@ -69,6 +69,7 @@ async def async_setup_entry(
                         cast(str, entity_config["icon"]),
                         cast(str, entity_config.get("unit", "")),
                         cast(SensorStateClass, entity_config.get("state_class")),
+                        cast(SensorDeviceClass, entity_config.get("device_class")),
                         coordinator,
                         entity_config["name"],
                         vehicle.vin,
@@ -134,16 +135,20 @@ class ToyotaNumericSensor(ToyotaNABaseEntity):
         icon: str,
         unit_of_measurement: str,
         state_class: Union[SensorStateClass, str],
+        device_class: Union[SensorDeviceClass, str, None] = None,
         *args: Any,
     ):
         super().__init__(*args)
         self._icon = icon
         self._state_class = state_class
+        self._device_class = device_class
         self._unit_of_measurement = unit_of_measurement
         self._vehicle_feature = vehicle_feature
 
     @property
     def icon(self) -> str:
+        # None lets Home Assistant use the device class icon, which for a
+        # battery tracks the charge level instead of sitting static.
         return self._icon
 
     @property
@@ -151,6 +156,10 @@ class ToyotaNumericSensor(ToyotaNABaseEntity):
         feat = cast(ToyotaNumeric, self.feature(self._vehicle_feature))
         if feat:
             return feat.value
+
+    @property
+    def device_class(self):
+        return self._device_class
 
     @property
     def state_class(self):

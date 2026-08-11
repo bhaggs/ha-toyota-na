@@ -299,8 +299,15 @@ SENSORS = [
         "electric": True,
     },
     {
+        # device_class BATTERY is what puts the battery indicator in the top
+        # right of the device page, the way the official Subaru integration
+        # does. It pairs with the Charging Status binary sensor's
+        # BATTERY_CHARGING class, which makes the frontend show it charging.
+        # icon is None so Home Assistant picks the level-appropriate battery
+        # icon instead of a static one.
         "state_class": SensorStateClass.MEASUREMENT,
-        "icon": "mdi:gauge",
+        "device_class": SensorDeviceClass.BATTERY,
+        "icon": None,
         "feature": VehicleFeatures.ChargeLevel,
         "name": "EV Battery Level",
         "unit": PERCENTAGE,
