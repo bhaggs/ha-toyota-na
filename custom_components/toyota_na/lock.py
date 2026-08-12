@@ -38,7 +38,8 @@ async def async_setup_entry(
         locks.append(
             ToyotaLock(
                 coordinator,
-                "",
+                "door_lock",
+                "Doors",
                 vehicle.vin,
             )
         )

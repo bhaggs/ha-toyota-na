@@ -57,6 +57,7 @@ async def async_setup_entry(
                     button["action"],
                     button["icon"],
                     coordinator,
+                    button["key"],
                     button["name"],
                     vehicle.vin,
                 )
@@ -81,11 +82,11 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
         vehicle = self.vehicle
         if vehicle is None:
             raise HomeAssistantError(
-                f"{self.sensor_name}: vehicle is not currently available"
+                f"{self._attr_name}: vehicle is not currently available"
             )
         if not vehicle.subscribed:
             raise HomeAssistantError(
-                f"{self.sensor_name}: requires an active remote services subscription"
+                f"{self._attr_name}: requires an active remote services subscription"
             )
 
         try:
@@ -100,7 +101,7 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
             # a button and deserves to know the car never got the command. These
             # are undocumented endpoints, so failures are not unexpected.
             _LOGGER.debug("%s failed for ...%s: %s", self._action, self.vin[-4:], e)
-            raise HomeAssistantError(f"{self.sensor_name} failed: {e}") from e
+            raise HomeAssistantError(f"{self._attr_name} failed: {e}") from e
 
     async def _refresh(self, vehicle) -> None:
         """Wake the vehicle for fresh state, then re-poll once it has settled."""

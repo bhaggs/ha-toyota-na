@@ -57,6 +57,7 @@ async def async_setup_entry(
                             cast(VehicleFeatures, entity_config["feature"]),
                             cast(str, entity_config["icon"]),
                             coordinator,
+                            entity_config["key"],
                             entity_config["name"],
                             vehicle.vin,
                         )
@@ -72,6 +73,7 @@ async def async_setup_entry(
                         cast(SensorDeviceClass, entity_config.get("device_class")),
                         entity_config.get("entity_category"),
                         coordinator,
+                        entity_config["key"],
                         entity_config["name"],
                         vehicle.vin,
                     )
@@ -111,7 +113,7 @@ class ToyotaTimestampSensor(ToyotaNABaseEntity):
             value = float(feat.value)
         except (TypeError, ValueError):
             _LOGGER.debug(
-                "Non-numeric timestamp %r for %s", feat.value, self.sensor_name
+                "Non-numeric timestamp %r for %s", feat.value, self._attr_name
             )
             return None
         if value >= _EPOCH_MS_THRESHOLD:
@@ -121,7 +123,7 @@ class ToyotaTimestampSensor(ToyotaNABaseEntity):
             return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
         except (OSError, OverflowError, ValueError):
             _LOGGER.debug(
-                "Out-of-range timestamp %r for %s", feat.value, self.sensor_name
+                "Out-of-range timestamp %r for %s", feat.value, self._attr_name
             )
             return None
 

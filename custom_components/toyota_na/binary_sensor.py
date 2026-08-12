@@ -52,6 +52,7 @@ async def async_setup_entry(
                         cast(str, entity_config["icon"]),
                         cast(BinarySensorDeviceClass, entity_config["device_class"]),
                         coordinator,
+                        entity_config["key"],
                         entity_config["name"],
                         vehicle.vin,
                     )

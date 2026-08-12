@@ -17,8 +17,16 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 features_sensors = [
-    {"feature": VehicleFeatures.ParkingLocation, "name": "Last Parked Location"},
-    {"feature": VehicleFeatures.RealTimeLocation, "name": "Current Location"},
+    {
+        "feature": VehicleFeatures.ParkingLocation,
+        "key": "last_parked_location",
+        "name": "Last parked location",
+    },
+    {
+        "feature": VehicleFeatures.RealTimeLocation,
+        "key": "location",
+        "name": "Location",
+    },
 ]
 
 
@@ -48,6 +56,7 @@ async def async_setup_entry(
                     ToyotaDeviceTracker(
                         cast(VehicleFeatures, feature_sensor["feature"]),
                         coordinator,
+                        entity_config["key"],
                         entity_config["name"],
                         vehicle.vin,
                     )

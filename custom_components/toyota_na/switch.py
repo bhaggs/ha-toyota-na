@@ -48,7 +48,11 @@ async def async_setup_entry(
     for vehicle in coordinator.data:
         if vehicle.subscribed is False:
             continue
-        switches.append(ToyotaRemoteStartSwitch(coordinator, "Remote Start", vehicle.vin))
+        switches.append(
+            ToyotaRemoteStartSwitch(
+                coordinator, "remote_start", "Remote start", vehicle.vin
+            )
+        )
 
     async_add_devices(switches)
 
@@ -103,17 +107,19 @@ class ToyotaRemoteStartSwitch(ToyotaNABaseEntity, SwitchEntity):
     async def _send(self, action: str, optimistic: bool) -> None:
         vehicle = self.vehicle
         if vehicle is None:
-            raise HomeAssistantError("Remote Start: vehicle is not currently available")
+            raise HomeAssistantError(
+                f"{self._attr_name}: vehicle is not currently available"
+            )
         if not vehicle.subscribed:
             raise HomeAssistantError(
-                "Remote Start: requires an active remote services subscription"
+                f"{self._attr_name}: requires an active remote services subscription"
             )
 
         try:
             await vehicle.send_command(COMMAND_MAP[action])
         except Exception as e:
             _LOGGER.debug("%s failed for ...%s: %s", action, self.vin[-4:], e)
-            raise HomeAssistantError(f"Remote Start failed: {e}") from e
+            raise HomeAssistantError(f"{self._attr_name} failed: {e}") from e
 
         self._optimistic = optimistic
         self.async_write_ha_state()
