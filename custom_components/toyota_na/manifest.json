@@ -7,7 +7,7 @@
     "codeowners": ["@bhaggs", "@vanstinator", "@widewing"],
     "requirements": ["toyota-na==2.1.1"],
     "issue_tracker": "https://github.com/bhaggs/ha-toyota-na/issues",
-    "version": "2.7.0-subaru.8",
+    "version": "2.7.0-subaru.9",
     "iot_class": "cloud_polling"
 }
 
