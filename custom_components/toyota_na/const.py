@@ -430,7 +430,8 @@ SENSORS = [
         "electric": False,
     },
     {
-        "state_class": SensorStateClass.MEASUREMENT,
+        # Decoded to a string by ev_codes, so no state_class.
+        "state_class": None,
         "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.PlugStatus,
         "key": "charging_plug",

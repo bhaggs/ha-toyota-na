@@ -94,8 +94,8 @@ commands are buttons.
 - **Lights.** The Subaru Connect app has a lights control. Its command string is
   unknown — `light-on` returns HTTP 400 — so there is no button for it yet. See
   [identifying unknown commands](#identifying-unknown-commands).
-- **`Charging type` and `Charging plug`** still report raw integers; `Charging
-  connector` is decoded.
+- **`Charging type`** still reports a raw integer; `Charging plug` and `Charging
+  connector` are decoded.
   ([#3](https://github.com/bhaggs/ha-toyota-na/issues/3))
 - **Key fob battery and oil life** appear in the app but not here. They were
   advertised in the upstream README for years and never implemented; the data may
