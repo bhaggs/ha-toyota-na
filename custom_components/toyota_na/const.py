@@ -7,6 +7,7 @@ from homeassistant.const import (
     EntityCategory,
     UnitOfLength,
     UnitOfPressure,
+    UnitOfTime,
 )
 
 from toyota_na.vehicle.base_vehicle import RemoteRequestCommand
@@ -233,7 +234,7 @@ BINARY_SENSORS = [
     {
         "device_class": BinarySensorDeviceClass.BATTERY_CHARGING,
         "feature": VehicleFeatures.ChargingStatus,
-        "icon": "mdi:ev-station",
+        "icon": "mdi:car-electric",
         "key": "charging",
         "name": "Charging",
         "subscription": True,
@@ -439,12 +440,17 @@ SENSORS = [
         "electric": True,
     },
     {
+        # Minutes, confirmed by measurement: over a 15 hour Level 1 session the
+        # value fell 975 units in 900 minutes of wall clock, i.e. ~1 per minute.
+        # Seconds would have meant 1640 units was 27 minutes of remaining charge
+        # while 15 hours actually elapsed. Matches widewing/ha-toyota-na#181.
         "state_class": SensorStateClass.MEASUREMENT,
-        "icon": "mdi:clock-outline",
+        "device_class": SensorDeviceClass.DURATION,
+        "icon": "mdi:battery-clock",
         "feature": VehicleFeatures.RemainingChargeTime,
         "key": "charging_time_remaining",
         "name": "Charging time remaining",
-        "unit": "",
+        "unit": UnitOfTime.MINUTES,
         "subscription": True,
         "electric": True,
     },

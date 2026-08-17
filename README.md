@@ -94,11 +94,9 @@ commands are buttons.
 - **Lights.** The Subaru Connect app has a lights control. Its command string is
   unknown — `light-on` returns HTTP 400 — so there is no button for it yet. See
   [identifying unknown commands](#identifying-unknown-commands).
-- **`Charge Type` and `Plug Status`** still report raw integers; `Connector
-  Status` is decoded.
+- **`Charging type` and `Charging plug`** still report raw integers; `Charging
+  connector` is decoded.
   ([#3](https://github.com/bhaggs/ha-toyota-na/issues/3))
-- **`Remaining Charge Time`** carries no unit, because whether it reports minutes
-  or seconds is unconfirmed. It does correctly report unknown when unplugged.
 - **Key fob battery and oil life** appear in the app but not here. They were
   advertised in the upstream README for years and never implemented; the data may
   live in the unused `v1/vehiclehealth/*` endpoints.
