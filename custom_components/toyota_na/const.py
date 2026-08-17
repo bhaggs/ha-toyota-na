@@ -59,12 +59,6 @@ SEND_COMMAND = "send_command"
 # subscribed vehicles, matching how lock.py handles it.
 BUTTONS = [
     {
-        # One button, not a pair. The hazards are momentary: they auto-off after
-        # roughly a minute, and hazard-off was measured to have no observable
-        # effect on a real vehicle. Toyota's own app offers no manual off either,
-        # and SubaruConnect shows a single hazards control. The hazards_off
-        # service is still registered for automations - it has never been proven
-        # broken everywhere, only never proven working.
         "action": HAZARDS_ON,
         "icon": "mdi:hazard-lights",
         "key": "hazards",
@@ -80,7 +74,7 @@ BUTTONS = [
         "action": REFRESH,
         "icon": "mdi:refresh",
         # Unlike the others this wakes the telematics unit to upload fresh
-        # state, so it draws on the 12V battery. See issue #2.
+        # state, so it draws on the 12V battery.
         "key": "refresh",
         "name": "Refresh",
     },
@@ -344,10 +338,6 @@ SENSORS = [
         "electric": False,
     },
     {
-        # Maintenance metadata rather than vehicle state, so it belongs in the
-        # device page's Diagnostic section, not next to range and door status.
-        # No state_class on purpose: this is a threshold that sits flat and then
-        # steps at each service, so long-term statistics over it are noise.
         "entity_category": EntityCategory.DIAGNOSTIC,
         "icon": "mdi:wrench-clock",
         "feature": VehicleFeatures.NextService,
@@ -378,29 +368,16 @@ SENSORS = [
         "electric": True,
     },
     {
-        # device_class BATTERY is what puts the battery indicator in the top
-        # right of the device page, the way the official Subaru integration
-        # does. It pairs with the Charging Status binary sensor's
-        # BATTERY_CHARGING class, which makes the frontend show it charging.
-        # icon is None so Home Assistant picks the level-appropriate battery
-        # icon instead of a static one.
         "state_class": SensorStateClass.MEASUREMENT,
         "device_class": SensorDeviceClass.BATTERY,
         "icon": None,
         "feature": VehicleFeatures.ChargeLevel,
-        # "EV" is not redundant here despite the device prefix: the car also
-        # has a 12V battery, and leaving room for it means not claiming the
-        # plain "battery" key either.
         "key": "ev_battery",
         "name": "EV battery",
         "unit": PERCENTAGE,
         "subscription": True,
         "electric": True,
     },
-    # The API reports these as unix epoch seconds. Marking them TIMESTAMP makes
-    # Home Assistant render them as real times ("10 minutes ago") instead of a
-    # raw 1786402632.0. A timestamp sensor must not also carry a state_class --
-    # measurement statistics are meaningless on a clock reading.
     {
         "device_class": SensorDeviceClass.TIMESTAMP,
         "icon": "mdi:clock-outline",
@@ -441,10 +418,6 @@ SENSORS = [
         "electric": True,
     },
     {
-        # Minutes, confirmed by measurement: over a 15 hour Level 1 session the
-        # value fell 975 units in 900 minutes of wall clock, i.e. ~1 per minute.
-        # Seconds would have meant 1640 units was 27 minutes of remaining charge
-        # while 15 hours actually elapsed. Matches widewing/ha-toyota-na#181.
         "state_class": SensorStateClass.MEASUREMENT,
         "device_class": SensorDeviceClass.DURATION,
         "icon": "mdi:battery-clock",
@@ -458,9 +431,6 @@ SENSORS = [
     {
         # Always kilometres, unlike evDistance/evDistanceAC which the API
         # converts to the account's preferred unit and tags with evDistanceUnit.
-        # This one arrives raw and unlabelled: a Solterra reporting 375.5 here
-        # alongside an EV Range of 233.0 mi cannot be miles (no Solterra travels
-        # 375 miles), and 375.5 km is 233.3 mi -- the same figure.
         "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:gauge",
         "feature": VehicleFeatures.EvTravelableDistance,
@@ -481,9 +451,6 @@ SENSORS = [
         "electric": True,
     },
     {
-        # ev_codes decodes this to a string, so no state_class: statistics over
-        # a latch state are meaningless, and Home Assistant rejects a numeric
-        # state_class on a non-numeric value.
         "state_class": None,
         "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.ConnectorStatus,
