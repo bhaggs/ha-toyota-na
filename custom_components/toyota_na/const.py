@@ -12,6 +12,8 @@ from homeassistant.const import (
 
 from toyota_na.vehicle.base_vehicle import RemoteRequestCommand
 
+from . import ev_codes
+
 
 DOMAIN = "toyota_na"
 
@@ -408,7 +410,10 @@ SENSORS = [
     },
     {
         # Decoded to a string by ev_codes, so no state_class.
+        # Decoded at the entity, not in the parser, so the raw code survives
+        # as an attribute. See ToyotaCodeSensor.
         "state_class": None,
+        "decode": ev_codes.PLUG_STATUS,
         "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.PlugStatus,
         "key": "charging_plug",
@@ -469,6 +474,7 @@ SENSORS = [
     },
     {
         "state_class": None,
+        "decode": ev_codes.CONNECTOR_STATUS,
         "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.ConnectorStatus,
         "key": "charging_connector",

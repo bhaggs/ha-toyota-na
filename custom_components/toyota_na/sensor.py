@@ -13,6 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
+from . import ev_codes
 from .base_entity import ToyotaNABaseEntity
 from .const import DOMAIN, SENSORS
 
@@ -65,6 +66,20 @@ async def async_setup_entry(
                         timestamp_cls(
                             cast(VehicleFeatures, entity_config["feature"]),
                             cast(str, entity_config["icon"]),
+                            coordinator,
+                            entity_config["key"],
+                            entity_config["name"],
+                            vehicle.vin,
+                        )
+                    )
+                    continue
+
+                if entity_config.get("decode"):
+                    sensors.append(
+                        ToyotaCodeSensor(
+                            cast(VehicleFeatures, entity_config["feature"]),
+                            cast(str, entity_config["icon"]),
+                            entity_config["decode"],
                             coordinator,
                             entity_config["key"],
                             entity_config["name"],
@@ -157,6 +172,42 @@ class ToyotaRelativeTimestampSensor(ToyotaTimestampSensor):
 
     def _to_datetime(self, value: float) -> "datetime | None":
         return dt_util.utcnow() + timedelta(minutes=value)
+
+
+class ToyotaCodeSensor(ToyotaNABaseEntity):
+    """A status code shown as a label, keeping the code as an attribute.
+
+    Decoding happens here rather than in the parser so the raw value is not
+    destroyed on the way through. It is worth keeping: automations can key on a
+    number that will not change when a label is reworded, and an unrecognised
+    code is visible in the UI rather than only in the log.
+    """
+
+    def __init__(self, vehicle_feature: VehicleFeatures, icon: str, table: dict, *args: Any):
+        super().__init__(*args)
+        self._icon = icon
+        self._table = table
+        self._vehicle_feature = vehicle_feature
+
+    @property
+    def icon(self) -> str:
+        return self._icon
+
+    @property
+    def _raw(self):
+        feat = cast(ToyotaNumeric, self.feature(self._vehicle_feature))
+        return feat.value if feat is not None else None
+
+    @property
+    def state(self):
+        # Names the entity in the unrecognised-code log, so the report points at
+        # something the user can actually see.
+        return ev_codes.decode(self._raw, self._table, self._attr_name or "code")
+
+    @property
+    def extra_state_attributes(self):
+        raw = self._raw
+        return None if raw is None else {"code": raw}
 
 
 class ToyotaNumericSensor(ToyotaNABaseEntity):
