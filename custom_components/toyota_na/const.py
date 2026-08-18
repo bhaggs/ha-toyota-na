@@ -464,6 +464,10 @@ SENSORS = [
         # taking its min and max produces nothing meaningful, whether it turns
         # out to be a capability bitmask or an unreported field.
         "state_class": None,
+        # Routed through the decoder with nothing mapped yet: the state stays
+        # the raw number, but it gains the code attribute its siblings have and
+        # mapping a value later is a line in ev_codes.CHARGE_TYPE.
+        "decode": ev_codes.CHARGE_TYPE,
         "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.ChargeType,
         "key": "charging_type",

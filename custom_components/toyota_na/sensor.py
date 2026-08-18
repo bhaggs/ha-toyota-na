@@ -74,7 +74,9 @@ async def async_setup_entry(
                     )
                     continue
 
-                if entity_config.get("decode"):
+                # "is not None", not truthiness: a table with nothing mapped
+                # yet is an empty dict, which is falsy.
+                if entity_config.get("decode") is not None:
                     sensors.append(
                         ToyotaCodeSensor(
                             cast(VehicleFeatures, entity_config["feature"]),

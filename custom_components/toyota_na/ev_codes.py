@@ -59,6 +59,26 @@ Six samples is not enough to decode the rest, so they are treated as an enum for
 now and unknown codes pass through unchanged.
 """
 
+CHARGE_TYPE: dict[int, str] = {}
+"""Charge type. Nothing mapped yet, deliberately wired up empty.
+
+Every reading taken so far is 15, including mid-session on Level 1, which fits
+two readings equally well:
+
+- a capability bitmask - 15 is 0b1111, so all four charge types supported; or
+- a field this vehicle does not populate, 15 being the all-bits-set "unknown"
+  idiom at 4 bit width, the same shape as the 65535 sentinel elsewhere here.
+
+The second looks more likely, since a live charge-type reading should have shown
+something Level 1 specific during a Level 1 charge. A DC fast charging session
+would settle it: a change means it is live, another 15 means it is static or
+unreported and the sensor is measuring nothing.
+
+Empty rather than absent so the sensor already routes through the decoder. The
+raw value is exposed as an attribute, unknown values are reported, and mapping
+one later is a line in this dict rather than a change in shape.
+"""
+
 UNAVAILABLE_UINT16 = 65535
 """0xFFFF, the "not applicable" sentinel for 16-bit fields.
 
@@ -108,11 +128,11 @@ def decode(value, table, field="code"):
     if marker not in _REPORTED_UNKNOWN:
         _REPORTED_UNKNOWN.add(marker)
         _LOGGER.info(
-            "Unrecognised %s value %r from the vehicle. Known values are %s. "
+            "Unrecognised %s value %r from the vehicle. %s "
             "Please report it at https://github.com/bhaggs/ha-toyota-na/issues/3",
             field,
             value,
-            sorted(table),
+            f"Known values are {sorted(table)}." if table else "No values are mapped yet.",
         )
     return value
 
