@@ -163,7 +163,7 @@ deliberate about what you send — the vocabulary includes things like
 
 Sensor naming and entity ID definition were modernized to conform to Home Assistant's current best practices. As such, Home Assistant will dynamically generate entity IDs in the following structure: **area + device + entity**, resulting in an ID like `binary_sensor.garage_2026_solterra_charging`.
 
-This format structure can be changed by going to **Settings → System → Entity ID format**. Note, that that is a system-wide setting rather than a per-integration one.
+This format structure can be changed by going to **Settings → System → Entity ID format**. Note, that this is a system-wide setting rather than a per-integration one.
 
 ## Toyota vehicles
 
