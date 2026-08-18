@@ -435,7 +435,7 @@ SENSORS = [
         # timestamp takes neither.
         "device_class": SensorDeviceClass.TIMESTAMP,
         "timestamp_from": "minutes_remaining",
-        "icon": "mdi:battery-clock-outline",
+        "icon": "mdi:battery-clock",
         "feature": VehicleFeatures.RemainingChargeTime,
         "key": "charging_finishes",
         "name": "Charging finishes",

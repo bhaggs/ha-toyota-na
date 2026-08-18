@@ -226,4 +226,8 @@ class ToyotaNumericSensor(ToyotaNABaseEntity):
                 elif _unit == "km":
                     return UnitOfLength.KILOMETERS
 
-        return self._unit_of_measurement
+        # "" means no unit, and it has to become None. Home Assistant publishes
+        # the attribute whenever this is not None, and the frontend reads the
+        # presence of a unit as "this entity is numeric" - which draws a line
+        # chart over states that are now words, plotting nothing.
+        return self._unit_of_measurement or None
