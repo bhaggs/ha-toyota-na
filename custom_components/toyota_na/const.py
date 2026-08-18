@@ -429,6 +429,20 @@ SENSORS = [
         "electric": True,
     },
     {
+        # The same reading as charging_time_remaining, expressed as the moment
+        # it lands on. HA renders a TIMESTAMP as relative time, so this shows as
+        # "In 3 hours" rather than "180 min". No state_class or unit: a
+        # timestamp takes neither.
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "timestamp_from": "minutes_remaining",
+        "icon": "mdi:battery-clock-outline",
+        "feature": VehicleFeatures.RemainingChargeTime,
+        "key": "charging_finishes",
+        "name": "Charging finishes",
+        "subscription": True,
+        "electric": True,
+    },
+    {
         # Always kilometres, unlike evDistance/evDistanceAC which the API
         # converts to the account's preferred unit and tags with evDistanceUnit.
         "state_class": SensorStateClass.MEASUREMENT,

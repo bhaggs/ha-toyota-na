@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Any, Union, cast
 
@@ -11,6 +11,7 @@ from homeassistant.const import EntityCategory, UnitOfLength
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from .base_entity import ToyotaNABaseEntity
 from .const import DOMAIN, SENSORS
@@ -52,8 +53,16 @@ async def async_setup_entry(
                 # Indexing here is what broke the previous attempt at this - one
                 # missing key raised KeyError and took down the whole platform.
                 if entity_config.get("device_class") == SensorDeviceClass.TIMESTAMP:
+                    # Both timestamp classes match on device_class, so the table
+                    # says which reading it holds. .get() because the existing
+                    # epoch sensors do not carry the key.
+                    timestamp_cls = (
+                        ToyotaRelativeTimestampSensor
+                        if entity_config.get("timestamp_from") == "minutes_remaining"
+                        else ToyotaTimestampSensor
+                    )
                     sensors.append(
-                        ToyotaTimestampSensor(
+                        timestamp_cls(
                             cast(VehicleFeatures, entity_config["feature"]),
                             cast(str, entity_config["icon"]),
                             coordinator,
@@ -104,6 +113,13 @@ class ToyotaTimestampSensor(ToyotaNABaseEntity):
     def device_class(self):
         return SensorDeviceClass.TIMESTAMP
 
+    def _to_datetime(self, value: float) -> "datetime | None":
+        """Interpret the reading as a point in time. Overridden per source."""
+        if value >= _EPOCH_MS_THRESHOLD:
+            value /= 1000
+        # Always UTC: the API gives no zone, and HA localizes for display.
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+
     @property
     def state(self):
         feat = cast(ToyotaNumeric, self.feature(self._vehicle_feature))
@@ -116,16 +132,31 @@ class ToyotaTimestampSensor(ToyotaNABaseEntity):
                 "Non-numeric timestamp %r for %s", feat.value, self._attr_name
             )
             return None
-        if value >= _EPOCH_MS_THRESHOLD:
-            value /= 1000
         try:
-            # Always UTC: the API gives no zone, and HA localizes for display.
-            return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+            moment = self._to_datetime(value)
         except (OSError, OverflowError, ValueError):
             _LOGGER.debug(
                 "Out-of-range timestamp %r for %s", feat.value, self._attr_name
             )
             return None
+        return moment.isoformat() if moment is not None else None
+
+
+class ToyotaRelativeTimestampSensor(ToyotaTimestampSensor):
+    """A countdown in minutes rendered as the moment it lands on.
+
+    The gateway reports how long a charge has left, not when it will finish.
+    Home Assistant renders a TIMESTAMP as relative time, so deriving the moment
+    turns "180 min" into "In 3 hours" and lets it count down between polls on
+    its own.
+
+    Recomputed each time the coordinator writes state, so the moment shifts
+    slightly as the vehicle revises its own estimate. That is the vehicle being
+    honest rather than drift on our side.
+    """
+
+    def _to_datetime(self, value: float) -> "datetime | None":
+        return dt_util.utcnow() + timedelta(minutes=value)
 
 
 class ToyotaNumericSensor(ToyotaNABaseEntity):

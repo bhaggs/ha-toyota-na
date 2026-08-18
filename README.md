@@ -77,9 +77,9 @@ and trunk lock state; current and last-parked location; odometer, speed, trip A
 and B, fuel level, distance to empty; tire pressures including spare; next
 service; last-update timestamps.
 
-**EV** — battery level, range with and without
-climate, travelable distance, charging state, connector state, plug state, charge
-type, remaining charge time.
+**EV** — battery level, range with and without climate, travelable distance,
+charging state, connector state, plug state, charge type, and charge time both as
+minutes remaining and as the moment charging finishes.
 
 **Controls** — lock/unlock; remote start/stop as a switch reporting whether the
 vehicle is running and for how much longer (on an EV this is climate
