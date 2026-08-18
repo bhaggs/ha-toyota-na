@@ -455,7 +455,10 @@ SENSORS = [
         "electric": True,
     },
     {
-        "state_class": SensorStateClass.MEASUREMENT,
+        # No state_class: this is a code, not a measurement. Averaging it or
+        # taking its min and max produces nothing meaningful, whether it turns
+        # out to be a capability bitmask or an unreported field.
+        "state_class": None,
         "icon": "mdi:ev-plug-tesla",
         "feature": VehicleFeatures.ChargeType,
         "key": "charging_type",
