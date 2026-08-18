@@ -1,57 +1,17 @@
-# ha-toyota-na — Subaru Connect for Home Assistant
+# ha-toyota-na — SubaruConnect for Home Assistant
 
-Home Assistant integration for **Subaru Connect** vehicles in North America:
-Solterra, Trailseeker, and Uncharted (MY23+).
+Home Assistant integration for **SubaruConnect** vehicles in North America: Solterra, Trailseeker, and Uncharted (MY23+).
 
-A fork of [widewing/ha-toyota-na](https://github.com/widewing/ha-toyota-na)
-focused on the Subaru experience. Toyota and Lexus vehicles still work exactly as
-before — see [Toyota vehicles](#toyota-vehicles).
+This is a fork of [widewing/ha-toyota-na](https://github.com/widewing/ha-toyota-na) focused on the Subaru experience. Toyota and Lexus vehicles are still supported, but changes and improvements from this fork have not been tested on those vehicles — see [Toyota vehicles](#toyota-vehicles).
 
-> **Unofficial and reverse-engineered.** Subaru publishes no API for this. The
+> **Unofficial and reverse-engineered.** Subaru publishes no API documentation. The
 > login tenant, brand headers, and account bootstrap were recovered from the
-> Subaru Connect Android app by [@adepssimius](https://github.com/adepssimius)
+> SubaruConnect Android app by [@adepssimius](https://github.com/adepssimius)
 > and [@keithnet](https://github.com/keithnet) — see [Credits](#credits). Subaru
 > can change or break any of it without notice.
->
-> Login, vehicle discovery, EV telemetry, and remote commands have all been
-> verified end-to-end against a real 2026 Solterra.
 
-## Not for MySubaru / STARLINK
-
-If your Subaru uses the **MySubaru** app, this will not work — that is STARLINK,
-a different platform. Use the official
-[`subaru`](https://www.home-assistant.io/integrations/subaru/) integration
-instead.
-
-Subaru Connect is the newer platform used by the models above. If you sign in at
-`subarudriverslogin.com`, you are in the right place.
-
-## Why this works at all
-
-Subaru Connect is not a separate service. It is the same Toyota `ctpa-oneapi`
-gateway the Toyota app talks to, reached through a different login tenant and a
-few brand-scoped request headers — Subaru's connected-services platform is
-supplied by Toyota.
-
-So Subaru support here is *parity through a shared backend*, not a separate
-implementation. Whatever works for a Toyota EV works the same way for a Solterra, Trailseeker, or Uncharted.
-
-Everything that differs lives in one file,
-[`oneapi/brands.py`](custom_components/toyota_na/oneapi/brands.py):
-
-| | Subaru | Toyota |
-|---|---|---|
-| Login tenant | `login.subarudriverslogin.com` | `login.toyotadriverslogin.com` |
-| `X-BRAND` / `X-APPBRAND` / `X-Brand-Id` | `S` | `T` |
-| User-Agent | `SubaruConnect` | `ToyotaOneApp` |
-| `GET v4/account` retry on empty discovery | yes | no |
-
-The OAuth realm, client ID, API keys, gateway host, GraphQL endpoint, and every
-endpoint path are identical across brands.
-
-`X-APPBRAND` is the one that matters: without it, login still succeeds but
-`v2/vehicle/guid` returns an empty list. Why each of the others is sent, and what
-was measured versus assumed, is documented in the code.
+> [!NOTE]
+> This integration is for Subaru's EVs only (those which use the SubaruConnect app). For Subaru's gas and PHEV models, use the official [`subaru`](https://www.home-assistant.io/integrations/subaru/) integration instead.
 
 ## Installation
 
@@ -91,7 +51,7 @@ commands are buttons.
 
 ### Known gaps
 
-- **Lights.** The Subaru Connect app has a lights control. Its command string is
+- **Lights.** The SubaruConnect app has a lights control. Its command string is
   unknown — `light-on` returns HTTP 400 — so there is no button for it yet. See
   [identifying unknown commands](#identifying-unknown-commands).
 - **`Charging type`** still reports a raw integer; `Charging plug` and `Charging
@@ -165,21 +125,41 @@ Sensor naming and entity ID definition were modernized to conform to Home Assist
 
 This format structure can be changed by going to **Settings → System → Entity ID format**. Note, that this is a system-wide setting rather than a per-integration one.
 
+## Why this works at all
+
+SubaruConnect is not a separate service. It is the same Toyota `ctpa-oneapi`
+gateway the Toyota app talks to, reached through a different login tenant and a
+few brand-scoped request headers — Subaru's connected-services platform is
+supplied by Toyota.
+
+So Subaru support here is *parity through a shared backend*, not a separate
+implementation. Whatever works for a Toyota EV works the same way for a Solterra, Trailseeker, or Uncharted.
+
+Everything that differs lives in one file,
+[`oneapi/brands.py`](custom_components/toyota_na/oneapi/brands.py):
+
+| | Subaru | Toyota |
+|---|---|---|
+| Login tenant | `login.subarudriverslogin.com` | `login.toyotadriverslogin.com` |
+| `X-BRAND` / `X-APPBRAND` / `X-Brand-Id` | `S` | `T` |
+| User-Agent | `SubaruConnect` | `ToyotaOneApp` |
+| `GET v4/account` retry on empty discovery | yes | no |
+
+The OAuth realm, client ID, API keys, gateway host, GraphQL endpoint, and every
+endpoint path are identical across brands.
+
+`X-APPBRAND` is the one that matters: without it, login still succeeds but
+`v2/vehicle/guid` returns an empty list. Why each of the others is sent, and what
+was measured versus assumed, is documented in the code.
+
 ## Toyota vehicles
 
-Still fully supported and unchanged. Brand defaults to Toyota, and config entries
-created before Subaru support keep working untouched — upgrading will not
-re-prompt or reconfigure anything.
+Still supported but changes made as part of this fork have not been tested on Toyota vehicles.
 
 A Toyota and a Subaru account can run side by side in one Home Assistant
 instance. Brand is fixed when the client is constructed and each config entry
 holds its own tokens, so the two never share auth state, even with the same email
 address on both.
-
-Several fixes made while building Subaru support apply to Toyota vehicles too:
-timestamps rendering as real times rather than epoch integers, request timeouts
-so a stalled call cannot wedge the integration, remote start as a stateful
-switch, connector status decoding, and the battery level in the device header.
 
 ## Credits
 
@@ -197,6 +177,4 @@ authentication.
 
 Subaru support rests on APK reverse-engineering done independently by
 [@adepssimius](https://github.com/adepssimius) and
-[@keithnet](https://github.com/keithnet), who arrived at matching findings — the
-`login.subarudriverslogin.com` tenant, the `X-APPBRAND` header, and the
-`v4/account` bootstrap. This integration only implements what they worked out.
+[@keithnet](https://github.com/keithnet).
