@@ -164,16 +164,41 @@ class ToyotaRelativeTimestampSensor(ToyotaTimestampSensor):
 
     The gateway reports how long a charge has left, not when it will finish.
     Home Assistant renders a TIMESTAMP as relative time, so deriving the moment
-    turns "180 min" into "In 3 hours" and lets it count down between polls on
-    its own.
+    turns "180 min" into "In 3 hours" and lets it count down on its own.
 
-    Recomputed each time the coordinator writes state, so the moment shifts
-    slightly as the vehicle revises its own estimate. That is the vehicle being
-    honest rather than drift on our side.
+    The moment is anchored to the reading that produced it, and only recomputed
+    when the vehicle reports a different number. Recomputing every poll looks
+    right but is not: the vehicle updates its estimate less often than we poll,
+    so "now + an unchanged 749 minutes" slid the finish time ten minutes later
+    on every poll, writing a new state each time out of a reading that had not
+    moved.
+
+    There is no timestamp in the charge payload to anchor to instead, so the
+    first poll that reports a new figure is taken as the moment it was measured.
+    Worst case that is one poll interval stale, against an estimate usually
+    hours long.
     """
 
+    def __init__(self, *args: Any):
+        super().__init__(*args)
+        self._anchor_reading: float | None = None
+        self._anchor_moment: "datetime | None" = None
+
     def _to_datetime(self, value: float) -> "datetime | None":
-        return dt_util.utcnow() + timedelta(minutes=value)
+        if value != self._anchor_reading:
+            self._anchor_reading = value
+            self._anchor_moment = dt_util.utcnow() + timedelta(minutes=value)
+        return self._anchor_moment
+
+    @property
+    def state(self):
+        result = super().state
+        if result is None:
+            # Charging stopped. Drop the anchor so an identical reading later
+            # is treated as new rather than reusing a moment already past.
+            self._anchor_reading = None
+            self._anchor_moment = None
+        return result
 
 
 class ToyotaCodeSensor(ToyotaNABaseEntity):
