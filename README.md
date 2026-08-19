@@ -41,9 +41,15 @@ service; last-update timestamps.
 charging state, connector state, plug state, charge type, and charge time both as
 minutes remaining and as the moment charging finishes.
 
-**Controls** — lock/unlock; remote start/stop as a switch reporting whether the
-vehicle is running and for how much longer (on an EV this is climate
-preconditioning); hazards; buzzer; refresh.
+**Controls**
+
+| Control | What it does |
+|---|---|
+| Doors | Lock and unlock. |
+| Remote start | Climate preconditioning on an EV, despite the name — the command the backend takes is still `engine-start`. A switch rather than buttons, because the vehicle reports whether it is running and for how much longer. |
+| Hazards | Flashes the hazard lights. Momentary: the vehicle stops them after about a minute on its own, and there is no working "off" command, so there is only one button. |
+| Buzzer | A short beep from the vehicle's external speaker, for locating it in a car park. Not the horn — the backend has a separate `sound-horn` command, which is not exposed as a button. |
+| Refresh | Asks the vehicle to upload fresh state. The only control that wakes the telematics unit — see [12V battery safety](#12v-battery-safety). |
 
 Every control is available both as an entity and as a service, so automations
 built on the services keep working. Stateful features are switches, one-shot
