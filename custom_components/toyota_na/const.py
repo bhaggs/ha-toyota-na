@@ -68,7 +68,7 @@ BUTTONS = [
     },
     {
         "action": BUZZER,
-        "icon": "mdi:bullhorn",
+        "icon": "mdi:car-wireless",
         "key": "buzzer",
         "name": "Buzzer",
     },
