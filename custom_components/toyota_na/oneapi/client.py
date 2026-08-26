@@ -260,6 +260,27 @@ class OneClient:
         return None
 
     async def remote_request_17cyplus(self, vin, command):
+        """Send a raw command string to the vehicle.
+
+        The vocabulary is undocumented and the inherited list of it is not
+        reliable, so this records what has actually been tried on a Subaru
+        Solterra rather than what that list claims.
+
+        Accepted and observed: door-lock, door-unlock, hazard-on,
+        buzzer-warning (a digital beep from the external speaker), sound-horn
+        (two chirps of the actual horn), headlight-on, find-vehicle (turns on
+        the hazards, so it duplicates hazard-on), refresh.
+
+        Accepted with no observed effect: engine-start.
+
+        Rejected with HTTP 400: light-on, light-off, lights-on, lights-off,
+        headlight-off, power-window-open. Note there is no off for the
+        headlights, and hazard-off is accepted but does nothing - both end on
+        their own.
+
+        Untested: engine-stop, ac-settings-on, ventilation-on, immediate-charge,
+        charge-start, charge-stop, power-window-close.
+        """
         return await self.api_post(
             "v1/global/remote/command", {"command": command}, {"VIN": vin}
         )

@@ -29,8 +29,7 @@ HAZARDS_OFF = "hazards_off"
 REFRESH = "refresh"
 BUZZER = "buzzer"
 SOUND_HORN = "sound_horn"
-LIGHTS_ON = "lights_on"
-LIGHTS_OFF = "lights_off"
+HEADLIGHTS = "headlights"
 
 UPDATE_INTERVAL = 600
 REFRESH_STATUS_INTERVAL = 2 * 3600
@@ -45,13 +44,12 @@ COMMAND_MAP = {
     REFRESH: RemoteRequestCommand.Refresh,
     BUZZER: RemoteRequestCommand.BuzzerWarning,
     SOUND_HORN: RemoteRequestCommand.SoundHorn,
-    LIGHTS_ON: RemoteRequestCommand.LightsOn,
-    LIGHTS_OFF: RemoteRequestCommand.LightsOff,
+    HEADLIGHTS: RemoteRequestCommand.Headlights,
 }
 
 # Commands the legacy 17CY protocol has no equivalent for. Buttons for these are
 # not created on those vehicles, since send_command would raise on press.
-CY17PLUS_ONLY_ACTIONS = {BUZZER, SOUND_HORN, LIGHTS_ON, LIGHTS_OFF}
+CY17PLUS_ONLY_ACTIONS = {BUZZER, SOUND_HORN, HEADLIGHTS}
 
 SEND_COMMAND = "send_command"
 
@@ -83,6 +81,15 @@ BUTTONS = [
         "icon": "mdi:bullhorn",
         "key": "horn",
         "name": "Horn",
+    },
+    {
+        # Momentary like the hazards: there is no off command, the vehicle ends
+        # it. find-vehicle is deliberately not exposed - it turns on the hazards,
+        # so it duplicates the Hazards button.
+        "action": HEADLIGHTS,
+        "icon": "mdi:car-light-high",
+        "key": "headlights",
+        "name": "Headlights",
     },
     {
         "action": REFRESH,

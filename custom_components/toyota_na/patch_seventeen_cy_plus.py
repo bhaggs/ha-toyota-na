@@ -34,11 +34,9 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         RemoteRequestCommand.Refresh: "refresh",
         RemoteRequestCommand.BuzzerWarning: "buzzer-warning",
         RemoteRequestCommand.SoundHorn: "sound-horn",
-        # The gateway documents buzzer-warning; the light commands are inferred
-        # from the naming pattern of the documented set (hazard-on/hazard-off,
-        # power-window-on/power-window-off) and are not confirmed.
-        RemoteRequestCommand.LightsOn: "light-on",
-        RemoteRequestCommand.LightsOff: "light-off",
+        # Confirmed on a Solterra. There is no off: headlight-off is rejected,
+        # so the vehicle ends it itself, the same as hazards.
+        RemoteRequestCommand.Headlights: "headlight-on",
     }
 
     #  We'll parse these keys out in the parser by mapping the category and section types to a string literal

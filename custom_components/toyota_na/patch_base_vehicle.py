@@ -85,8 +85,7 @@ class RemoteRequestCommand(Enum):
     # command/value pair and has no equivalent for these.
     BuzzerWarning = auto()
     SoundHorn = auto()
-    LightsOn = auto()
-    LightsOff = auto()
+    Headlights = auto()
 
 
 class ToyotaVehicle(ABC):

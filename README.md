@@ -50,17 +50,13 @@ minutes remaining and as the moment charging finishes.
 | Hazards | Flashes the hazard lights. Momentary: the vehicle stops them after about a minute on its own. |
 | Buzzer | A short digital beep from the vehicle's external speaker, for locating it in a parking lot. |
 | Horn | Two short chirps of the actual horn. Louder and more attention-getting than the buzzer. |
+| Headlights | Turns on the headlights. Momentary, like the hazards — the vehicle turns them off itself. |
 | Refresh | Asks the vehicle to upload fresh state. The only control that wakes the telematics unit — see [12V battery safety](#12v-battery-safety). |
 
 Every control is available both as an entity and as a service.
 
 ### Known gaps
 
-- **Lights.** The SubaruConnect app has a lights control, but its command string
-  is unknown, so there is no button for it yet. `light-on`, `light-off`,
-  `lights-on` and `lights-off` have all been tried and rejected. See
-  [identifying unknown commands](#identifying-unknown-commands) if you want to
-  test another candidate.
 - **`Charging type`** still reports a raw integer; `Charging plug` and `Charging
   connector` are decoded.
   ([#3](https://github.com/bhaggs/ha-toyota-na/issues/3))
