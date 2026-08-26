@@ -48,7 +48,8 @@ minutes remaining and as the moment charging finishes.
 | Doors | Lock and unlock. |
 | Remote start | Climate preconditioning, despite the name — the command the backend takes is `engine-start`. A switch rather than buttons, because the vehicle reports whether it is running and for how much longer. |
 | Hazards | Flashes the hazard lights. Momentary: the vehicle stops them after about a minute on its own. |
-| Buzzer | A short beep from the vehicle's external speaker, for locating it in a parking lot. |
+| Buzzer | A short digital beep from the vehicle's external speaker, for locating it in a parking lot. |
+| Horn | Two short chirps of the actual horn. Louder and more attention-getting than the buzzer. |
 | Refresh | Asks the vehicle to upload fresh state. The only control that wakes the telematics unit — see [12V battery safety](#12v-battery-safety). |
 
 Every control is available both as an entity and as a service.

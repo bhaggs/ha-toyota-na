@@ -28,6 +28,7 @@ HAZARDS_ON = "hazards_on"
 HAZARDS_OFF = "hazards_off"
 REFRESH = "refresh"
 BUZZER = "buzzer"
+SOUND_HORN = "sound_horn"
 LIGHTS_ON = "lights_on"
 LIGHTS_OFF = "lights_off"
 
@@ -43,13 +44,14 @@ COMMAND_MAP = {
     HAZARDS_OFF: RemoteRequestCommand.HazardsOff,
     REFRESH: RemoteRequestCommand.Refresh,
     BUZZER: RemoteRequestCommand.BuzzerWarning,
+    SOUND_HORN: RemoteRequestCommand.SoundHorn,
     LIGHTS_ON: RemoteRequestCommand.LightsOn,
     LIGHTS_OFF: RemoteRequestCommand.LightsOff,
 }
 
 # Commands the legacy 17CY protocol has no equivalent for. Buttons for these are
 # not created on those vehicles, since send_command would raise on press.
-CY17PLUS_ONLY_ACTIONS = {BUZZER, LIGHTS_ON, LIGHTS_OFF}
+CY17PLUS_ONLY_ACTIONS = {BUZZER, SOUND_HORN, LIGHTS_ON, LIGHTS_OFF}
 
 SEND_COMMAND = "send_command"
 
@@ -71,6 +73,16 @@ BUTTONS = [
         "icon": "mdi:car-wireless",
         "key": "buzzer",
         "name": "Buzzer",
+    },
+    {
+        # Confirmed distinct from the buzzer on a Solterra: this is the actual
+        # horn, a short double chirp, where the buzzer is a digital beep from
+        # the external speaker. mdi:bullhorn suits it and is free now that the
+        # buzzer uses a locate icon.
+        "action": SOUND_HORN,
+        "icon": "mdi:bullhorn",
+        "key": "horn",
+        "name": "Horn",
     },
     {
         "action": REFRESH,

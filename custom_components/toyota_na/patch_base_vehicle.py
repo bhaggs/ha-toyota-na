@@ -84,6 +84,7 @@ class RemoteRequestCommand(Enum):
     # 17CYPLUS and later only. The legacy 17CY protocol takes a different
     # command/value pair and has no equivalent for these.
     BuzzerWarning = auto()
+    SoundHorn = auto()
     LightsOn = auto()
     LightsOff = auto()
 

@@ -33,6 +33,7 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         RemoteRequestCommand.HazardsOff: "hazard-off",
         RemoteRequestCommand.Refresh: "refresh",
         RemoteRequestCommand.BuzzerWarning: "buzzer-warning",
+        RemoteRequestCommand.SoundHorn: "sound-horn",
         # The gateway documents buzzer-warning; the light commands are inferred
         # from the naming pattern of the documented set (hazard-on/hazard-off,
         # power-window-on/power-window-off) and are not confirmed.
