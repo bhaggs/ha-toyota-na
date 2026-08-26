@@ -55,13 +55,15 @@ Every control is available both as an entity and as a service.
 
 ### Known gaps
 
-- **Lights.** The SubaruConnect app has a lights control. Its command string is
-  unknown — `light-on` returns HTTP 400 — so there is no button for it yet. See
-  [identifying unknown commands](#identifying-unknown-commands).
+- **Lights.** The SubaruConnect app has a lights control, but its command string
+  is unknown, so there is no button for it yet. `light-on`, `light-off`,
+  `lights-on` and `lights-off` have all been tried and rejected. See
+  [identifying unknown commands](#identifying-unknown-commands) if you want to
+  test another candidate.
 - **`Charging type`** still reports a raw integer; `Charging plug` and `Charging
   connector` are decoded.
   ([#3](https://github.com/bhaggs/ha-toyota-na/issues/3))
-- **Key fob battery and oil life** appear in the app but not here. They were
+- **Key fob battery** appears in the app but not here. It was
   advertised in the upstream README for years and never implemented; the data may
   live in the unused `v1/vehiclehealth/*` endpoints.
 

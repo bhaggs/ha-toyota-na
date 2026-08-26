@@ -149,12 +149,20 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
                     "Sending raw command %r to vehicle ...%s", command, vin[-4:]
                 )
                 try:
-                    await client.remote_request_17cyplus(vin, command)
+                    result = await client.remote_request_17cyplus(vin, command)
                 except Exception as e:
                     raise HomeAssistantError(
                         f"Command {command!r} rejected: {e}"
                     ) from e
-                _LOGGER.warning("Raw command %r was accepted", command)
+                # The gateway returns failures inside 200 responses as well as
+                # by status code, so "no exception" is not the same as "the
+                # vehicle acted on it". Log what came back, truncated, so a
+                # refusal is distinguishable from a success.
+                _LOGGER.warning(
+                    "Raw command %r accepted with response: %s",
+                    command,
+                    str(result)[:500],
+                )
                 return
 
         raise HomeAssistantError("No loaded config entry for that vehicle")
