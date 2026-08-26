@@ -274,12 +274,16 @@ class OneClient:
         Accepted with no observed effect: engine-start.
 
         Rejected with HTTP 400: light-on, light-off, lights-on, lights-off,
-        headlight-off, power-window-open. Note there is no off for the
-        headlights, and hazard-off is accepted but does nothing - both end on
-        their own.
+        headlight-off, power-window-open, ac-settings-on, ventilation-on. Note
+        there is no off for the headlights, and hazard-off is accepted but does
+        nothing - both end on their own.
 
-        Untested: engine-stop, ac-settings-on, ventilation-on, immediate-charge,
-        charge-start, charge-stop, power-window-close.
+        That leaves engine-start as the only climate command the gateway will
+        take, so it is the right one for preconditioning despite the name. Why
+        the vehicle showed no response to it is still open.
+
+        Untested: engine-stop, immediate-charge, charge-start, charge-stop,
+        power-window-close.
         """
         return await self.api_post(
             "v1/global/remote/command", {"command": command}, {"VIN": vin}
