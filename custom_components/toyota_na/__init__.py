@@ -2,7 +2,7 @@ from datetime import timedelta, datetime
 import logging
 import asyncio
 
-from .oneapi import OneAuth, OneClient, get_brand
+from .oneapi import OneAuth, OneClient, TokenRefreshError, get_brand
 
 # Patch base_vehicle
 import toyota_na.vehicle.base_vehicle
@@ -34,7 +34,11 @@ from .patch_vehicle import get_vehicles
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 from homeassistant.helpers import device_registry as dr, service
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -197,6 +201,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     except AuthError as e:
         _LOGGER.debug("Stored tokens rejected for %s: %s", brand.name, e)
         raise ConfigEntryAuthFailed(e) from e
+    except TokenRefreshError as e:
+        # The credentials are fine, the token endpoint is not. Retry rather than
+        # sending the user through a one-time-code login over a server blip.
+        raise ConfigEntryNotReady(e) from e
 
     coordinator = DataUpdateCoordinator(
         hass,

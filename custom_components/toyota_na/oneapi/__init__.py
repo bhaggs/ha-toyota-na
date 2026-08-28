@@ -4,7 +4,7 @@ Toyota, Lexus, and Subaru all run on the same gateway; the brand only changes
 the ForgeRock tenant, a handful of request headers, and whether an account
 bootstrap call is needed before vehicle discovery works. See brands.py.
 """
-from .auth import OneAuth
+from .auth import OneAuth, TokenRefreshError
 from .brands import BRANDS, DEFAULT_BRAND, BrandConfig, get_brand
 from .client import OneClient
 
@@ -14,5 +14,6 @@ __all__ = [
     "BrandConfig",
     "OneAuth",
     "OneClient",
+    "TokenRefreshError",
     "get_brand",
 ]

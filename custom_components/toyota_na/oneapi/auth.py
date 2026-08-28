@@ -28,6 +28,16 @@ _LOGGER = logging.getLogger(__name__)
 AUTH_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 
+class TokenRefreshError(Exception):
+    """A token refresh failed for a reason that is not the credentials.
+
+    Deliberately not an AuthError. Those trigger Home Assistant's reauth flow,
+    which asks the user for a one-time code - the right response to a refresh
+    token the server has rejected, and the wrong response to the server being
+    briefly unavailable.
+    """
+
+
 class OneAuth:
     """Token lifecycle for one account on one brand."""
 
@@ -202,9 +212,49 @@ class OneAuth:
             async with session.post(self.brand.access_token_url, data=data) as resp:
                 body = await resp.text()
                 if resp.status != 200:
-                    _LOGGER.debug("token -> HTTP %d: %s", resp.status, body[:500])
-                    raise LoginError()
+                    self._raise_token_failure(resp.status, body)
                 self._extract_tokens(json.loads(body))
+
+    @staticmethod
+    def _raise_token_failure(status, body):
+        """Separate a rejected grant from the server being unavailable.
+
+        Treating every non-200 as an auth failure meant a single 5xx from the
+        token endpoint sent the user through a full one-time-code login, for
+        what a retry ten minutes later would have fixed. OAuth is explicit about
+        the difference: a refresh token the server will not honour comes back as
+        400 with an invalid_grant error, while 5xx and 429 are the server's
+        problem and are worth retrying.
+        """
+        error = ""
+        try:
+            error = str(json.loads(body).get("error", ""))
+        except ValueError:
+            pass
+
+        rejected = status in (400, 401) and error in (
+            "invalid_grant",
+            "invalid_token",
+            "unauthorized_client",
+            "invalid_client",
+        )
+        if rejected:
+            _LOGGER.warning(
+                "Token refresh rejected (HTTP %d, %s). Sign in again to reconnect.",
+                status,
+                error,
+            )
+            raise LoginError()
+
+        # Logged at warning because the alternative - a silent debug line - is
+        # what made an earlier reauth prompt impossible to explain after the fact.
+        _LOGGER.warning(
+            "Token refresh failed with HTTP %d%s. Retrying; no sign-in needed "
+            "unless this persists.",
+            status,
+            f" ({error})" if error else "",
+        )
+        raise TokenRefreshError(f"token endpoint returned HTTP {status}")
 
     async def check_tokens(self):
         if self._expires_at is None:
@@ -234,6 +284,15 @@ class OneAuth:
         self._guid = self._decode_id_token()["sub"]
         self._expires_at = datetime.utcnow().timestamp() + token_resp["expires_in"]
         self._updated_at = datetime.utcnow().timestamp()
+        refresh_lifetime = token_resp.get("refresh_expires_in")
+        if refresh_lifetime:
+            _LOGGER.info(
+                "Signed in to %s. Access token lasts %s minutes, refresh token "
+                "%.1f days - a sign-in is needed again only after that.",
+                self.brand.name,
+                round(token_resp["expires_in"] / 60),
+                refresh_lifetime / 86400,
+            )
         if self._callback:
             try:
                 self._callback(self.get_tokens())
