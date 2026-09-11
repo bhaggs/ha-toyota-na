@@ -59,11 +59,31 @@ door_unlock:
         device:
           integration: toyota_na
 refresh:
-  description: Refresh data for your Toyota vehicle.
+  name: Refresh
+  description:
+    Re-read the vehicle's state from the servers. Does not contact the vehicle,
+    so it costs nothing and can be called as often as you like - but it only
+    returns what the servers already hold. Use Poll vehicle to make the vehicle
+    upload something newer.
   fields:
     vehicle:
       description:
         Device (vehicle) you wish to refresh data for.
+      required: true
+      selector:
+        device:
+          integration: toyota_na
+poll_vehicle:
+  name: Poll vehicle
+  description:
+    Wake the vehicle's telematics unit and tell it to upload fresh state, then
+    re-read it. This is the only part of the integration that draws on the 12V
+    battery, so prefer it deliberately over a short automatic interval on a
+    vehicle that sits parked and unplugged.
+  fields:
+    vehicle:
+      description:
+        Device (vehicle) you wish to wake.
       required: true
       selector:
         device:

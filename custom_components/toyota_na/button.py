@@ -19,13 +19,18 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .base_entity import ToyotaNABaseEntity
-from .const import BUTTONS, COMMAND_MAP, CY17PLUS_ONLY_ACTIONS, DOMAIN, REFRESH
+from .const import (
+    BUTTONS,
+    COMMAND_MAP,
+    CY17PLUS_ONLY_ACTIONS,
+    DOMAIN,
+    POLL_VEHICLE,
+    REFRESH,
+    REFRESH_SETTLE_SECONDS,
+)
+from .polling import async_poll_vehicle
 
 _LOGGER = logging.getLogger(__name__)
-
-# A refresh asks the vehicle to upload fresh state, which takes a moment to come
-# back. Matches the delay the equivalent service uses before re-polling.
-REFRESH_SETTLE_SECONDS = 10
 
 
 async def async_setup_entry(
@@ -41,16 +46,17 @@ async def async_setup_entry(
     ]["coordinator"]
 
     for vehicle in coordinator.data:
-        # Every one of these needs a remote subscription; without one the
-        # command would be refused, so offering the button would be misleading.
-        if vehicle.subscribed is False:
-            continue
         # The legacy 17CY protocol sends a different command/value pair and has
         # no equivalent for the buzzer or lights, so send_command would raise on
         # press. Leave those buttons off rather than offer a broken control.
         legacy = vehicle.generation == ApiVehicleGeneration.CY17
         for button in BUTTONS:
             if legacy and button["action"] in CY17PLUS_ONLY_ACTIONS:
+                continue
+            # Almost all of these need a remote subscription; without one the
+            # command would be refused, so offering the button would mislead.
+            # Refresh is the exception - it only re-reads the cloud.
+            if button.get("subscription", True) and vehicle.subscribed is False:
                 continue
             buttons.append(
                 ToyotaButton(
@@ -79,6 +85,12 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
         return self._icon
 
     async def async_press(self) -> None:
+        # Refresh touches only the cloud, so it needs neither a reachable
+        # vehicle object nor a subscription. Handled before those checks.
+        if self._action == REFRESH:
+            await self.coordinator.async_request_refresh()
+            return
+
         vehicle = self.vehicle
         if vehicle is None:
             raise HomeAssistantError(
@@ -90,8 +102,8 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
             )
 
         try:
-            if self._action == REFRESH:
-                await self._refresh(vehicle)
+            if self._action == POLL_VEHICLE:
+                await self._poll_vehicle(vehicle)
             else:
                 await vehicle.send_command(COMMAND_MAP[self._action])
         except HomeAssistantError:
@@ -103,9 +115,16 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
             _LOGGER.debug("%s failed for ...%s: %s", self._action, self.vin[-4:], e)
             raise HomeAssistantError(f"{self._attr_name} failed: {e}") from e
 
-    async def _refresh(self, vehicle) -> None:
-        """Wake the vehicle for fresh state, then re-poll once it has settled."""
-        await vehicle.poll_vehicle_refresh()
+    async def _poll_vehicle(self, vehicle) -> None:
+        """Wake the vehicle for fresh state, then re-read once it has settled.
+
+        A deliberate press is not a scheduled poll, so this goes straight to the
+        wake without consulting the poll interval.
+        """
+        # async_poll_vehicle swallows the failure so a scheduled poll can carry
+        # on to the next vehicle. Here someone is watching, so say so.
+        if not await async_poll_vehicle(vehicle):
+            raise HomeAssistantError(f"{self._attr_name}: the vehicle did not respond")
         # Show what we already have straight away so the UI reacts to the press.
         self.coordinator.async_set_updated_data(self.coordinator.data)
         await asyncio.sleep(REFRESH_SETTLE_SECONDS)

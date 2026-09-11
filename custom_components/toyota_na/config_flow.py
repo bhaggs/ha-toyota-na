@@ -1,11 +1,26 @@
 import logging
 
 from homeassistant import config_entries
+from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 import voluptuous as vol
 
 from toyota_na.exceptions import AuthError
 
-from .const import BRAND, DOMAIN
+from .const import (
+    BRAND,
+    CONF_FETCH_INTERVAL,
+    CONF_POLL_INTERVAL,
+    DEFAULT_FETCH_MINUTES,
+    DEFAULT_POLL_HOURS,
+    DOMAIN,
+    MAX_FETCH_MINUTES,
+    MAX_POLL_HOURS,
+)
 from .oneapi import BRANDS, DEFAULT_BRAND, OneAuth, OneClient, get_brand
 
 _LOGGER = logging.getLogger(__name__)
@@ -17,6 +32,13 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Toyota and Subaru North America connected services"""
 
     _default_brand = DEFAULT_BRAND
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        return ToyotaNAOptionsFlow()
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -141,3 +163,58 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if data:
             self._default_brand = get_brand(data.get(BRAND)).code
         return await self.async_step_user()
+
+
+class ToyotaNAOptionsFlow(config_entries.OptionsFlowWithReload):
+    """How often to re-read the cloud, and how often to wake the vehicle.
+
+    OptionsFlowWithReload rather than a plain OptionsFlow plus an update
+    listener. It reloads the entry only when the options actually changed, which
+    matters here: the scheduled poll writes its timestamp into entry.data, and a
+    plain update listener fires on any entry update at all - so the naive
+    version would tear down and rebuild every entity on the entry every time the
+    vehicle was polled. It also refuses to run alongside an update listener, so
+    the mistake cannot quietly come back.
+    """
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            # Selectors hand back floats; these are only ever whole units.
+            return self.async_create_entry(
+                data={key: int(value) for key, value in user_input.items()}
+            )
+
+        options = self.config_entry.options
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_FETCH_INTERVAL,
+                        default=options.get(
+                            CONF_FETCH_INTERVAL, DEFAULT_FETCH_MINUTES
+                        ),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=0,
+                            max=MAX_FETCH_MINUTES,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="min",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_POLL_INTERVAL,
+                        default=options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_HOURS),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=0,
+                            max=MAX_POLL_HOURS,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="h",
+                        )
+                    ),
+                }
+            ),
+        )

@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import datetime
 import logging
 import asyncio
 
@@ -40,6 +40,7 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 from homeassistant.helpers import device_registry as dr, service
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .websocket_handler import ToyotaWebSocketHandler
@@ -54,10 +55,16 @@ from .const import (
     HAZARDS_OFF,
     DOOR_LOCK,
     DOOR_UNLOCK,
+    POLL_VEHICLE,
     REFRESH,
+    REFRESH_SETTLE_SECONDS,
     SEND_COMMAND,
-    UPDATE_INTERVAL,
-    REFRESH_STATUS_INTERVAL
+)
+from .polling import (
+    POLL_DUE_FRACTION,
+    async_poll_vehicle,
+    fetch_interval,
+    poll_interval,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -99,21 +106,30 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
             _LOGGER.warning("No coordinator data")
             return
 
+        # Re-reading the cloud needs no vehicle and no subscription, so it is
+        # answered before any of the per-vehicle work below.
+        if remote_action == REFRESH:
+            _LOGGER.info("Handling service call %s", remote_action)
+            await coordinator.async_request_refresh()
+            return
+
         for identifier in device.identifiers:
             if identifier[0] == DOMAIN:
 
                 vin = identifier[1]
                 for vehicle in coordinator.data:
-                    if vehicle.vin == vin and remote_action.upper() == "REFRESH" and vehicle.subscribed:
-                        await vehicle.poll_vehicle_refresh()
-                        # TODO: This works great and prevents us from unnecessarily hitting Toyota. But we can and should
-                        # probably do stuff like this in the library where we can better control which APIs we hit to refresh our in-memory data.
+                    if vehicle.vin != vin or not vehicle.subscribed:
+                        continue
+                    if remote_action == POLL_VEHICLE:
+                        await async_poll_vehicle(vehicle)
+                        # Show what we already have so the call has a visible
+                        # effect, then re-read once the vehicle has uploaded.
                         coordinator.async_set_updated_data(coordinator.data)
-                        await asyncio.sleep(10)
+                        await asyncio.sleep(REFRESH_SETTLE_SECONDS)
                         await coordinator.async_request_refresh()
-                    elif vehicle.vin == vin and vehicle.subscribed:
+                    else:
                         await vehicle.send_command(COMMAND_MAP[remote_action])
-                        break
+                    break
 
                 # Masked: HA logs at INFO by default and these get pasted into
                 # public support threads. Last 4 is enough to tell cars apart.
@@ -178,6 +194,7 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
     hass.services.async_register(DOMAIN, DOOR_LOCK, async_service_handle)
     hass.services.async_register(DOMAIN, DOOR_UNLOCK, async_service_handle)
     hass.services.async_register(DOMAIN, REFRESH, async_service_handle)
+    hass.services.async_register(DOMAIN, POLL_VEHICLE, async_service_handle)
     hass.services.async_register(DOMAIN, SEND_COMMAND, async_send_command)
 
     return True
@@ -209,9 +226,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
+        # Passed explicitly rather than left to the ContextVar fallback, which
+        # is also what makes Home Assistant's own "Enable polling for updates"
+        # system option apply to this coordinator.
+        config_entry=entry,
         name=DOMAIN,
         update_method=lambda: update_vehicles_status(hass, client, entry),
-        update_interval=timedelta(seconds=UPDATE_INTERVAL),
+        # None is a supported value meaning never: the coordinator simply does
+        # not schedule itself, and manual refreshes still work.
+        update_interval=fetch_interval(entry),
     )
     # Entities read this for the device-registry manufacturer. Attached here
     # rather than passed through every platform's entity constructor, which
@@ -233,6 +256,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "ws_handler": ws_handler,
     }
 
+    # The vehicle poll runs on its own timer rather than inside the fetch, so
+    # the two can be set independently - the point of the whole arrangement is
+    # that you can read the cloud often while rarely or never waking the car.
+    # Nothing is scheduled at all when the interval is set to never.
+    if (poll := poll_interval(entry)) is not None:
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass,
+                lambda _now: async_scheduled_poll(hass, entry),
+                poll,
+                name=f"{DOMAIN} vehicle poll",
+                cancel_on_shutdown=True,
+            )
+        )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -245,11 +283,56 @@ def update_tokens(tokens: dict[str, str], hass: HomeAssistant, entry: ConfigEntr
     hass.config_entries.async_update_entry(entry, data=data)
 
 
+async def async_scheduled_poll(hass: HomeAssistant, entry: ConfigEntry):
+    """Wake every subscribed vehicle on the entry, then re-read once.
+
+    The read at the end is what makes "never fetch, poll once a day" coherent:
+    waking the vehicle only makes it upload to the cloud, so without a fetch
+    afterwards nobody would ever see the fresh state.
+    """
+    coordinator = (hass.data[DOMAIN].get(entry.entry_id) or {}).get("coordinator")
+    poll = poll_interval(entry)
+    if coordinator is None or coordinator.data is None or poll is None:
+        return
+
+    last_polled_at = entry.data.get("last_refreshed_at") or 0
+    since = datetime.utcnow().timestamp() - last_polled_at
+    if since < poll.total_seconds() * POLL_DUE_FRACTION:
+        # Home Assistant was restarted recently enough that the timer re-armed
+        # before the vehicle was actually due. Skipping here is what stops a
+        # restart loop turning into a wake loop.
+        _LOGGER.debug(
+            "Skipping scheduled poll; last one was %d minutes ago", since / 60
+        )
+        return
+
+    polled = False
+    for vehicle in coordinator.data:
+        if not vehicle.subscribed:
+            continue
+        _LOGGER.info(
+            "Polling %s %s for fresh state",
+            vehicle.model_year,
+            vehicle.model_name,
+        )
+        polled = await async_poll_vehicle(vehicle) or polled
+
+    if not polled:
+        # Nothing was woken, so nothing new is waiting in the cloud. Leaving the
+        # timestamp alone means the next interval tries again rather than
+        # treating a total failure as a completed poll.
+        return
+
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, "last_refreshed_at": datetime.utcnow().timestamp()},
+    )
+    await asyncio.sleep(REFRESH_SETTLE_SECONDS)
+    await coordinator.async_request_refresh()
+
+
 async def update_vehicles_status(hass: HomeAssistant, client: OneClient, entry: ConfigEntry):
-    need_refresh = False
-    need_refresh_before = datetime.utcnow().timestamp() - REFRESH_STATUS_INTERVAL
-    if "last_refreshed_at" not in entry.data or entry.data["last_refreshed_at"] < need_refresh_before:
-        need_refresh = True
+    """Re-read state the cloud already holds. Never contacts the vehicle."""
     try:
         _LOGGER.debug("Updating vehicle status")
         raw_vehicles = await get_vehicles(client)
@@ -271,21 +354,7 @@ async def update_vehicles_status(hass: HomeAssistant, client: OneClient, entry: 
                 _LOGGER.warning(
                     f"Your {vehicle.model_year} {vehicle.model_name} needs a remote services subscription to fully work with Home Assistant."
                 )
-            if need_refresh and vehicle.subscribed:
-                try:
-                    _LOGGER.info(
-                        "Requesting vehicle refresh for %s %s",
-                        vehicle.model_year,
-                        vehicle.model_name,
-                    )
-                    await vehicle.poll_vehicle_refresh()
-                except Exception as e:
-                    _LOGGER.warning("Vehicle refresh failed (%s), continuing without refresh", e)
             vehicles.append(vehicle)
-        entry_data = dict(entry.data)
-        if need_refresh:
-            entry_data["last_refreshed_at"] = datetime.utcnow().timestamp()
-        hass.config_entries.async_update_entry(entry, data=entry_data)
         return vehicles
     except AuthError as e:
         # Hand off to Home Assistant's reauth flow rather than retrying the
