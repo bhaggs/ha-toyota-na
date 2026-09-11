@@ -51,7 +51,8 @@ minutes remaining and as the moment charging finishes.
 | Buzzer | A short digital beep from the vehicle's external speaker, for locating it in a parking lot. |
 | Horn | Two short chirps of the actual horn. Louder and more attention-getting than the buzzer. |
 | Headlights | Turns on the headlights. Momentary, like the hazards — the vehicle turns them off itself. |
-| Refresh | Asks the vehicle to upload fresh state. The only control that wakes the telematics unit — see [12V battery safety](#12v-battery-safety). |
+| Refresh | Re-reads what the servers already hold. Never contacts the vehicle, so it costs nothing. |
+| Poll vehicle | Wakes the telematics unit and tells it to upload fresh state. The only control that touches the vehicle — see [Polling and the 12V battery](#polling-and-the-12v-battery). |
 
 Every control is available both as an entity and as a service.
 
@@ -64,17 +65,61 @@ Every control is available both as an entity and as a service.
   advertised in the upstream README for years and never implemented; the data may
   live in the unused `v1/vehiclehealth/*` endpoints.
 
-## 12V battery safety
+## Polling and the 12V battery
 
-Only one thing here touches the vehicle. The 10-minute poll reads cached state
-from Toyota's servers and never contacts the car, so it costs nothing. The
-**2-hour refresh** wakes the telematics unit, as do the `Refresh Data` button and
-the `toyota_na.refresh` service.
+Two things happen on a timer, and only one of them touches the vehicle.
 
-That is about 12 wakes a day. While charging or running, the DC-DC converter
-maintains the 12V and wakes are effectively free; the risk window is a vehicle
-parked and unplugged for a long stretch. Making these intervals configurable is
-[#2](https://github.com/bhaggs/ha-toyota-na/issues/2).
+| | What it does | Cost to the vehicle | Default |
+|---|---|---|---|
+| **Refresh** | Reads state the servers already hold | Nothing — the vehicle is never contacted | every 10 minutes |
+| **Poll vehicle** | Wakes the telematics unit and tells it to upload | Draws on the 12V battery | every 2 hours |
+
+Both are configurable. Go to **Settings → Devices & Services → Toyota / Subaru
+(North America) → Configure**, and set either to **0 to turn it off entirely**.
+
+The poll is the one that matters. At the 2-hour default that is about twelve
+wakes a day. While the vehicle is charging or running, the DC-DC converter
+maintains the 12V and a wake costs effectively nothing — the risk window is a
+vehicle parked and unplugged for days at a stretch, which is exactly when a fixed
+2-hour cycle is least useful and most harmful. Solterras in particular have a
+documented history of 12V complaints.
+
+Turning the poll off does not mean losing data. The Refresh side keeps working,
+21MM+ vehicles push updates over a WebSocket when the engine is switched off, and
+you can wake the vehicle on your own terms:
+
+```yaml
+# Wake the vehicle when you get home, to see whether it got plugged in
+triggers:
+  - trigger: zone
+    entity_id: person.you
+    zone: zone.home
+    event: enter
+actions:
+  - action: toyota_na.poll_vehicle
+    data:
+      vehicle: <device id>
+```
+
+`sensor.<your_car>_last_updated` is the vehicle's own report timestamp, so it is
+the right thing to test against for "poll only if nothing has come in lately":
+
+```yaml
+conditions:
+  - condition: template
+    value_template: >
+      {{ now() - states('sensor.solterra_last_updated') | as_datetime
+         > timedelta(hours=24) }}
+```
+
+Both controls exist as buttons and as services (`toyota_na.refresh` and
+`toyota_na.poll_vehicle`). Home Assistant's built-in
+`homeassistant.update_entity` on any of the vehicle's entities is equivalent to
+Refresh.
+
+Two further reductions are still open:
+[skipping the wake while the vehicle is plugged in, and trimming what each wake
+sends](https://github.com/bhaggs/ha-toyota-na/issues/2).
 
 ## Troubleshooting
 

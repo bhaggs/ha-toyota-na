@@ -27,12 +27,39 @@ ENGINE_STOP = "engine_stop"
 HAZARDS_ON = "hazards_on"
 HAZARDS_OFF = "hazards_off"
 REFRESH = "refresh"
+POLL_VEHICLE = "poll_vehicle"
 BUZZER = "buzzer"
 SOUND_HORN = "sound_horn"
 HEADLIGHTS = "headlights"
 
-UPDATE_INTERVAL = 600
-REFRESH_STATUS_INTERVAL = 2 * 3600
+# Two very different costs, so they are configured separately.
+#
+# A fetch is four GETs for state the cloud already holds. The telematics unit is
+# never contacted, so it costs the vehicle's 12V battery nothing.
+#
+# A poll wakes the telematics unit and tells it to upload. It is the
+# integration's entire 12V exposure, which matters for a vehicle left parked and
+# unplugged for days - Solterras in particular have a history of 12V complaints.
+#
+# Naming follows the MySubaru integration, which Solterra owners are likely to
+# have met first: "refresh" fetches, "poll vehicle" wakes.
+CONF_FETCH_INTERVAL = "fetch_interval"
+CONF_POLL_INTERVAL = "poll_interval"
+
+# Defaults match the intervals that used to be hardcoded, so an entry with no
+# options set behaves exactly as it did before the options flow existed.
+DEFAULT_FETCH_MINUTES = 10
+DEFAULT_POLL_HOURS = 2
+
+# Both accept 0, meaning never. Upper bounds only exist to keep the form
+# sensible; the fetch is capped at a day and the poll at a week.
+MAX_FETCH_MINUTES = 1440
+MAX_POLL_HOURS = 168
+
+# A poll asks the vehicle to upload fresh state, which takes a moment to come
+# back. Shared by the button, the service, the scheduled poll and the lock's
+# post-command check so they all wait the same amount.
+REFRESH_SETTLE_SECONDS = 10
 
 COMMAND_MAP = {
     DOOR_LOCK: RemoteRequestCommand.DoorLock,
@@ -41,7 +68,9 @@ COMMAND_MAP = {
     ENGINE_STOP: RemoteRequestCommand.EngineStop,
     HAZARDS_ON: RemoteRequestCommand.HazardsOn,
     HAZARDS_OFF: RemoteRequestCommand.HazardsOff,
-    REFRESH: RemoteRequestCommand.Refresh,
+    # Refresh is deliberately absent: it is a cloud fetch, not a command sent to
+    # the vehicle, so it never reaches this table.
+    POLL_VEHICLE: RemoteRequestCommand.Refresh,
     BUZZER: RemoteRequestCommand.BuzzerWarning,
     SOUND_HORN: RemoteRequestCommand.SoundHorn,
     HEADLIGHTS: RemoteRequestCommand.Headlights,
@@ -57,8 +86,8 @@ SEND_COMMAND = "send_command"
 # vehicle reports nothing to read back afterwards. Remote start is deliberately
 # not here - it is stateful, so it lives in switch.py.
 #
-# All of them require a remote subscription, so buttons are only created for
-# subscribed vehicles, matching how lock.py handles it.
+# All of them require a remote subscription except Refresh, so buttons are only
+# created for subscribed vehicles unless the entry says "subscription": False.
 BUTTONS = [
     {
         "action": HAZARDS_ON,
@@ -92,12 +121,23 @@ BUTTONS = [
         "name": "Headlights",
     },
     {
+        # Re-reads what the cloud already holds. Costs the vehicle nothing, so
+        # unlike every other button here it does not need a subscription and is
+        # safe to press or automate as often as you like.
         "action": REFRESH,
         "icon": "mdi:refresh",
-        # Unlike the others this wakes the telematics unit to upload fresh
-        # state, so it draws on the 12V battery.
         "key": "refresh",
         "name": "Refresh",
+        "subscription": False,
+    },
+    {
+        # The only button that wakes the telematics unit, and so the only one
+        # that draws on the 12V battery. Its automatic counterpart is the poll
+        # interval in the integration's options, which can be set to never.
+        "action": POLL_VEHICLE,
+        "icon": "mdi:car-connected",
+        "key": "poll_vehicle",
+        "name": "Poll vehicle",
     },
 ]
 

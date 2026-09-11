@@ -17,7 +17,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .base_entity import ToyotaNABaseEntity
-from .const import COMMAND_MAP, DOMAIN, DOOR_LOCK, DOOR_UNLOCK
+from .const import (
+    COMMAND_MAP,
+    DOMAIN,
+    DOOR_LOCK,
+    DOOR_UNLOCK,
+    REFRESH_SETTLE_SECONDS,
+)
 
 
 async def async_setup_entry(
@@ -106,7 +112,7 @@ class ToyotaLock(ToyotaNABaseEntity, LockEntity):
         """Poll for updated vehicle state after a command, then refresh the coordinator."""
         try:
             await self.vehicle.poll_vehicle_refresh()
-            await asyncio.sleep(10)
+            await asyncio.sleep(REFRESH_SETTLE_SECONDS)
             self._state_changing = False
             await self.coordinator.async_request_refresh()
         except Exception:

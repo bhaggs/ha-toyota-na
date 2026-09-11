@@ -26,5 +26,21 @@
       "abort": {
         "reauth_successful": "Re-authentication was successful"
       }
+    },
+    "options": {
+      "step": {
+        "init": {
+          "title": "Polling",
+          "description": "Refreshing reads what the servers already hold and costs the vehicle nothing. Polling wakes the vehicle to upload fresh state, which draws on its 12V battery — the setting to lower, or turn off, for a vehicle left parked and unplugged for long periods.",
+          "data": {
+            "fetch_interval": "Refresh interval",
+            "poll_interval": "Poll vehicle interval"
+          },
+          "data_description": {
+            "fetch_interval": "How often to re-read the servers. Set to 0 to never refresh on a schedule; the Refresh button and toyota_na.refresh still work.",
+            "poll_interval": "How often to wake the vehicle. Set to 0 to never wake it on a schedule; the Poll vehicle button and toyota_na.poll_vehicle still work."
+          }
+        }
+      }
     }
   }
