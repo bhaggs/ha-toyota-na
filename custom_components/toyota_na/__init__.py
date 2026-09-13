@@ -261,14 +261,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # that you can read the cloud often while rarely or never waking the car.
     # Nothing is scheduled at all when the interval is set to never.
     if (poll := poll_interval(entry)) is not None:
+        # Must be an async def, not a lambda returning the coroutine. Home
+        # Assistant inspects the callable to decide how to run it, and a lambda
+        # is not a coroutine function however it is written - so it gets
+        # classified as an executor job, run in a worker thread, and the
+        # coroutine it returns is dropped without ever being awaited. The timer
+        # fires on schedule and the vehicle is silently never polled.
+        async def _scheduled_poll(_now) -> None:
+            await async_scheduled_poll(hass, entry)
+
         entry.async_on_unload(
             async_track_time_interval(
                 hass,
-                lambda _now: async_scheduled_poll(hass, entry),
+                _scheduled_poll,
                 poll,
                 name=f"{DOMAIN} vehicle poll",
                 cancel_on_shutdown=True,
             )
+        )
+
+    # Stated once per load, at info, because "what is it actually set to do"
+    # otherwise cannot be answered from a log at all - the schedules are silent
+    # until something happens, and "nothing happened" looks the same whether an
+    # interval is off, misread, or broken.
+    fetch = fetch_interval(entry)
+    _LOGGER.info(
+        "Refreshing from %s %s; polling the vehicle %s",
+        brand.name,
+        f"every {fetch}" if fetch else "only on request",
+        f"every {poll}" if poll else "only on request",
+    )
+
+    # Home Assistant's own "Enable polling for updates" switch, under the entry's
+    # system options, silently overrides the refresh interval and reports
+    # nothing anywhere. Worth a warning: it is a second, better-hidden off
+    # switch, and someone who set an interval here has clearly not chosen it.
+    if fetch is not None and entry.pref_disable_polling:
+        _LOGGER.warning(
+            "Refreshing is set to every %s, but Home Assistant's own "
+            "\"Enable polling for updates\" option is off for this entry, so no "
+            "scheduled refresh will happen. Turn it on under the entry's "
+            "three-dot menu, System options.",
+            fetch,
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

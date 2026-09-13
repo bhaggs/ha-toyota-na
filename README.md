@@ -123,6 +123,51 @@ sends](https://github.com/bhaggs/ha-toyota-na/issues/2).
 
 ## Troubleshooting
 
+### Debug logging
+
+Settings → Devices & Services → **Toyota / Subaru (North America)** → the
+three-dot menu → **Enable debug logging**. Reproduce the problem, then **Disable
+debug logging**, and the browser downloads the log. Or in `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.toyota_na: debug
+```
+
+### Nothing is updating on its own
+
+The integration states its schedule once per load, at info level, so this is
+visible without enabling debug:
+
+```
+Refreshing from Subaru every 0:10:00; polling the vehicle every 2:00:00
+Refreshing from Subaru only on request; polling the vehicle only on request
+```
+
+A vehicle poll that actually ran also logs at info:
+
+```
+Polling 2024 Solterra for fresh state
+```
+
+If the schedule line says `only on request`, the interval is set to 0 — see
+[Polling and the 12V battery](#polling-and-the-12v-battery).
+
+There is a **second, easily-missed off switch**: Home Assistant's own *Enable
+polling for updates*, under the entry's three-dot menu → **System options**. It
+silently overrides the refresh interval. When it is off and an interval is set,
+you will see:
+
+```
+Refreshing is set to every 0:10:00, but Home Assistant's own "Enable polling
+for updates" option is off for this entry, so no scheduled refresh will happen.
+```
+
+With debug on, you also get a line per cloud read (`Updating vehicle status`)
+and the reason a scheduled poll was skipped (`Skipping scheduled poll; last one
+was N minutes ago` — the guard that stops a restart loop becoming a wake loop).
+
 ### Setup fails, or no vehicles appear
 
 `scripts/validate_brand.py` exercises login and vehicle discovery with no Home
@@ -202,7 +247,7 @@ was measured versus assumed, is documented in the code.
 
 ## Toyota vehicles
 
-Still supported but changes made as part of this fork have not been tested on Toyota vehicles.
+Still supported but changes made as part of this fork have **not** been tested on Toyota vehicles.
 
 A Toyota and a Subaru account can run side by side in one Home Assistant
 instance. Brand is fixed when the client is constructed and each config entry
