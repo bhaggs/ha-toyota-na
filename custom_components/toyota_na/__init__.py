@@ -1,6 +1,4 @@
-from datetime import datetime
 import logging
-import asyncio
 
 from .oneapi import OneAuth, OneClient, TokenRefreshError, get_brand
 
@@ -57,13 +55,12 @@ from .const import (
     DOOR_UNLOCK,
     POLL_VEHICLE,
     REFRESH,
-    REFRESH_SETTLE_SECONDS,
     SEND_COMMAND,
 )
 from .polling import (
-    POLL_DUE_FRACTION,
-    async_poll_vehicle,
+    async_poll_now,
     fetch_interval,
+    poll_due,
     poll_interval,
 )
 
@@ -121,12 +118,12 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
                     if vehicle.vin != vin or not vehicle.subscribed:
                         continue
                     if remote_action == POLL_VEHICLE:
-                        await async_poll_vehicle(vehicle)
-                        # Show what we already have so the call has a visible
-                        # effect, then re-read once the vehicle has uploaded.
-                        coordinator.async_set_updated_data(coordinator.data)
-                        await asyncio.sleep(REFRESH_SETTLE_SECONDS)
-                        await coordinator.async_request_refresh()
+                        # Deliberately not gated on the poll interval: an
+                        # explicit call is not a scheduled wake. It does record
+                        # the poll, so it defers the next scheduled one.
+                        await async_poll_now(
+                            hass, coordinator.config_entry, coordinator, [vehicle]
+                        )
                     else:
                         await vehicle.send_command(COMMAND_MAP[remote_action])
                     break
@@ -318,51 +315,33 @@ def update_tokens(tokens: dict[str, str], hass: HomeAssistant, entry: ConfigEntr
 
 
 async def async_scheduled_poll(hass: HomeAssistant, entry: ConfigEntry):
-    """Wake every subscribed vehicle on the entry, then re-read once.
+    """Poll whichever vehicles have gone longer than the interval unpolled.
 
-    The read at the end is what makes "never fetch, poll once a day" coherent:
-    waking the vehicle only makes it upload to the cloud, so without a fetch
-    afterwards nobody would ever see the fresh state.
+    The interval is a staleness floor rather than a metronome, so a vehicle a
+    button press or automation already woke is left alone until it goes stale
+    again. Judged per vehicle, because on a multi-car account one car being
+    polled says nothing about another.
     """
     coordinator = (hass.data[DOMAIN].get(entry.entry_id) or {}).get("coordinator")
     poll = poll_interval(entry)
     if coordinator is None or coordinator.data is None or poll is None:
         return
 
-    last_polled_at = entry.data.get("last_refreshed_at") or 0
-    since = datetime.utcnow().timestamp() - last_polled_at
-    if since < poll.total_seconds() * POLL_DUE_FRACTION:
-        # Home Assistant was restarted recently enough that the timer re-armed
-        # before the vehicle was actually due. Skipping here is what stops a
-        # restart loop turning into a wake loop.
-        _LOGGER.debug(
-            "Skipping scheduled poll; last one was %d minutes ago", since / 60
-        )
+    due = [v for v in coordinator.data if v.subscribed and poll_due(entry, v.vin, poll)]
+    if not due:
+        # Either something polled recently, or Home Assistant restarted and
+        # re-armed the timer before anything was actually due. Either way,
+        # waking now would buy nothing.
+        _LOGGER.debug("Skipping scheduled poll; nothing is stale enough yet")
         return
 
-    polled = False
-    for vehicle in coordinator.data:
-        if not vehicle.subscribed:
-            continue
+    for vehicle in due:
         _LOGGER.info(
             "Polling %s %s for fresh state",
             vehicle.model_year,
             vehicle.model_name,
         )
-        polled = await async_poll_vehicle(vehicle) or polled
-
-    if not polled:
-        # Nothing was woken, so nothing new is waiting in the cloud. Leaving the
-        # timestamp alone means the next interval tries again rather than
-        # treating a total failure as a completed poll.
-        return
-
-    hass.config_entries.async_update_entry(
-        entry,
-        data={**entry.data, "last_refreshed_at": datetime.utcnow().timestamp()},
-    )
-    await asyncio.sleep(REFRESH_SETTLE_SECONDS)
-    await coordinator.async_request_refresh()
+    await async_poll_now(hass, entry, coordinator, due)
 
 
 async def update_vehicles_status(hass: HomeAssistant, client: OneClient, entry: ConfigEntry):

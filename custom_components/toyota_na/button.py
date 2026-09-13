@@ -5,7 +5,6 @@ entity behind it, so nothing appeared on the device page except the lock. These
 buttons expose the same actions as entities. The services stay registered, so
 existing automations and scripts are unaffected.
 """
-import asyncio
 import logging
 from typing import Any
 
@@ -26,9 +25,8 @@ from .const import (
     DOMAIN,
     POLL_VEHICLE,
     REFRESH,
-    REFRESH_SETTLE_SECONDS,
 )
-from .polling import async_poll_vehicle
+from .polling import async_poll_now
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -118,14 +116,13 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
     async def _poll_vehicle(self, vehicle) -> None:
         """Wake the vehicle for fresh state, then re-read once it has settled.
 
-        A deliberate press is not a scheduled poll, so this goes straight to the
-        wake without consulting the poll interval.
+        A deliberate press is not a scheduled poll, so the interval is not
+        consulted. The poll is still recorded, so pressing this defers the next
+        scheduled poll rather than being followed by a redundant one.
         """
-        # async_poll_vehicle swallows the failure so a scheduled poll can carry
-        # on to the next vehicle. Here someone is watching, so say so.
-        if not await async_poll_vehicle(vehicle):
+        # async_poll_now swallows the failure so a multi-vehicle poll can carry
+        # on to the next car. Here someone is watching, so say so.
+        if not await async_poll_now(
+            self.hass, self.coordinator.config_entry, self.coordinator, [vehicle]
+        ):
             raise HomeAssistantError(f"{self._attr_name}: the vehicle did not respond")
-        # Show what we already have straight away so the UI reacts to the press.
-        self.coordinator.async_set_updated_data(self.coordinator.data)
-        await asyncio.sleep(REFRESH_SETTLE_SECONDS)
-        await self.coordinator.async_request_refresh()
