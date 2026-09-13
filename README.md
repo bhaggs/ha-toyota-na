@@ -77,6 +77,13 @@ Two things happen on a timer, and only one of them touches the vehicle.
 Both are configurable. Go to **Settings → Devices & Services → Toyota / Subaru
 (North America) → Configure**, and set either to **0 to turn it off entirely**.
 
+The poll interval is a **staleness floor, not a fixed cadence**: it wakes the
+vehicle only if nothing has polled it for that long. The Poll vehicle button and
+`toyota_na.poll_vehicle` count, so an automation that polls when you get home
+pushes the next scheduled poll back rather than being followed by a second wake
+minutes later. With nothing else polling, it behaves exactly like a plain
+interval. Each vehicle on the account is tracked separately.
+
 The poll is the one that matters. At the 2-hour default that is about twelve
 wakes a day. While the vehicle is charging or running, the DC-DC converter
 maintains the 12V and a wake costs effectively nothing — the risk window is a
