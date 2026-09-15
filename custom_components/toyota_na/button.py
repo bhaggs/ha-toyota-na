@@ -132,4 +132,8 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
             [vehicle],
             context=self._context,
         ):
-            raise HomeAssistantError(f"{self._attr_name}: the vehicle did not respond")
+            raise HomeAssistantError(
+                f"{self._attr_name}: the vehicle's servers did not accept the "
+                "request, often because they are rate-limiting polls. Try again "
+                "later; the log says exactly why."
+            )

@@ -245,19 +245,20 @@ class OneClient:
         return None
 
     async def send_refresh_request_17cyplus(self, vin):
-        try:
-            return await self.api_post(
-                "v1/global/remote/refresh-status",
-                {
-                    "guid": await self.auth.get_guid(),
-                    "deviceId": self.auth.get_device_id(),
-                    "vin": vin,
-                },
-                {"VIN": vin},
-            )
-        except Exception as e:
-            _LOGGER.debug("refresh-status failed: %s", e)
-        return None
+        """Ask the vehicle to upload fresh status over REST. Raises if refused.
+
+        The poll is the only caller, and it decides what a refusal means.
+        Swallowing the error here is how a refused poll used to count as one.
+        """
+        return await self.api_post(
+            "v1/global/remote/refresh-status",
+            {
+                "guid": await self.auth.get_guid(),
+                "deviceId": self.auth.get_device_id(),
+                "vin": vin,
+            },
+            {"VIN": vin},
+        )
 
     async def remote_request_17cyplus(self, vin, command):
         """Send a raw command string to the vehicle.
@@ -306,20 +307,21 @@ class OneClient:
             return None
 
     async def send_refresh_request_17cy(self, vin):
-        try:
-            return await self.api_post(
-                "v1/legacy/remote/refresh-status",
-                {
-                    "guid": await self.auth.get_guid(),
-                    "deviceId": self.auth.get_device_id(),
-                    "deviceType": "Android",
-                    "vin": vin,
-                },
-                {"VIN": vin},
-            )
-        except Exception as e:
-            _LOGGER.debug("v1/legacy/remote/refresh-status failed: %s", e)
-            return None
+        """Ask a 17CY vehicle to upload fresh status. Raises if refused.
+
+        The poll is the only caller, and it decides what a refusal means.
+        Swallowing the error here is how a refused poll used to count as one.
+        """
+        return await self.api_post(
+            "v1/legacy/remote/refresh-status",
+            {
+                "guid": await self.auth.get_guid(),
+                "deviceId": self.auth.get_device_id(),
+                "deviceType": "Android",
+                "vin": vin,
+            },
+            {"VIN": vin},
+        )
 
     async def remote_request_17cy(self, vin, command, value):
         return await self.api_post(
@@ -368,7 +370,13 @@ class OneClient:
 
     # --- GraphQL (AppSync) ---
 
-    async def graphql_request(self, operation_name, query, variables):
+    async def graphql_request(self, operation_name, query, variables, *, raise_errors=False):
+        """Send one GraphQL operation to the AppSync endpoint.
+
+        By default a refused request logs at debug and returns None, which suits
+        the preparatory calls whose failure changes nothing. raise_errors=True
+        raises GraphQLError instead, for callers that need to know it failed.
+        """
         headers = {
             "Content-Type": "application/json",
             "x-api-key": APPSYNC_API_KEY,
@@ -404,6 +412,11 @@ class OneClient:
                         resp.status,
                         body[:500],
                     )
+                    if raise_errors:
+                        # The body stays at debug: it can carry the VIN or
+                        # account details, which never belong in a message
+                        # that may end up logged at warning.
+                        raise GraphQLError(operation_name, resp.status, "")
                     return None
                 result = json.loads(body)
                 if result.get("errors"):
@@ -414,6 +427,12 @@ class OneClient:
                         err.get("errorType"),
                         err.get("message"),
                     )
+                    if raise_errors:
+                        raise GraphQLError(
+                            operation_name,
+                            None,
+                            f"{err.get('errorType')}: {err.get('message')}",
+                        )
                     return None
                 return result.get("data")
 
@@ -429,7 +448,48 @@ class OneClient:
         )
 
     async def graphql_refresh_status(self, vin):
-        """Ask the vehicle to upload fresh status."""
+        """Ask the vehicle to upload fresh status. Raises GraphQLError if refused."""
         return await self.graphql_request(
-            "RefreshVehicleStatus", GRAPHQL_REFRESH_STATUS, {"vin": vin}
+            "RefreshVehicleStatus",
+            GRAPHQL_REFRESH_STATUS,
+            {"vin": vin},
+            raise_errors=True,
         )
+
+    @staticmethod
+    def is_rate_limited(error: Exception) -> bool:
+        """Whether the gateway refused a request for being over its rate limit.
+
+        HTTP 429 only. A GraphQL error type can contain "429" without being a
+        rate limit - "APPSYNC-429: Device limit exceeded", which confirming a
+        subscription returns routinely while everything else works, is one.
+        """
+        return getattr(error, "status", None) == 429
+
+    @classmethod
+    def describe_refusal(cls, refusals: list[tuple[str, Exception]]) -> str:
+        """Say why a poll was refused, in a form fit for a warning."""
+        if refusals and all(cls.is_rate_limited(error) for _, error in refusals):
+            return "rate-limited by the connected-services servers (HTTP 429)"
+        return "; ".join(
+            f"{name}: {str(error)[:200] or type(error).__name__}"
+            for name, error in refusals
+        )
+
+
+class GraphQLError(Exception):
+    """A GraphQL operation the gateway refused.
+
+    Carries the HTTP status where there was one, so a rate limit can be told
+    apart from any other refusal. Never the response body.
+    """
+
+    def __init__(self, operation: str, status: int | None, detail: str) -> None:
+        message = f"{operation} refused"
+        if status:
+            message += f" with HTTP {status}"
+        if detail:
+            message += f": {detail}"
+        super().__init__(message)
+        self.operation = operation
+        self.status = status

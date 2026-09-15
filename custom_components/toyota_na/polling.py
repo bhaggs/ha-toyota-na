@@ -154,19 +154,24 @@ def poll_interval(entry: ConfigEntry) -> timedelta | None:
 async def async_poll_vehicle(vehicle) -> bool:
     """Wake one telematics unit and ask it to upload fresh state.
 
-    Returns whether the wake actually went through. Failures are logged and
-    swallowed rather than raised: one unreachable vehicle on a multi-car account
+    Returns whether the servers accepted the request. A refusal - most often a
+    rate limit - is logged at warning by the vehicle, which knows why, and comes
+    back False, so the poll is neither recorded nor named as a cause.
+
+    Failures are not raised: one unreachable vehicle on a multi-car account
     should not stop the others being polled, and a scheduled poll has no user
     waiting on it to report to. Callers that do have a user waiting - the button
     - check the return value and surface it themselves.
     """
     try:
-        await vehicle.poll_vehicle_refresh()
+        accepted = await vehicle.poll_vehicle_refresh()
     except Exception as e:
         _LOGGER.warning(
-            "Could not poll vehicle ...%s (%s); will try again next interval",
+            "Could not poll vehicle ...%s (%s); it was not counted as a poll",
             vehicle.vin[-4:],
             e,
         )
         return False
-    return True
+    # "is True" rather than truthiness: an implementation that forgets to say
+    # must not count as accepted.
+    return accepted is True
