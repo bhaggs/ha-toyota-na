@@ -1,7 +1,7 @@
 {
   "name": "Toyota / Subaru (North America)",
   "domains": ["device_tracker", "sensor"],
-  "homeassistant": "2025.8.0",
+  "homeassistant": "2026.8.0",
   "iot_class": ["Cloud Polling"],
   "render_readme": true,
   "zip_release": true,

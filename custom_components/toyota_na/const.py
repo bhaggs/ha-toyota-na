@@ -82,6 +82,12 @@ CY17PLUS_ONLY_ACTIONS = {BUZZER, SOUND_HORN, HEADLIGHTS}
 
 SEND_COMMAND = "send_command"
 
+# Fired so Activity details can name a cause for an update nothing else started.
+# Where a person or automation did start one, their context is used instead and
+# neither event fires. Described in logbook.py; see coordinator.py.
+EVENT_VEHICLE_POLLED = f"{DOMAIN}_vehicle_polled"
+EVENT_VEHICLE_REPORT = f"{DOMAIN}_vehicle_report"
+
 # One-shot remote commands. Buttons suit these because they are stateless: the
 # vehicle reports nothing to read back afterwards. Remote start is deliberately
 # not here - it is stateful, so it lives in switch.py.
