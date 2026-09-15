@@ -86,6 +86,9 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
         # Refresh touches only the cloud, so it needs neither a reachable
         # vehicle object nor a subscription. Handled before those checks.
         if self._action == REFRESH:
+            # Credit the press if the refresh brings a new report. Held on the
+            # coordinator, because the refresh is debounced and may run late.
+            self.coordinator.async_set_cause([self.vin], self._context)
             await self.coordinator.async_request_refresh()
             return
 
@@ -123,6 +126,10 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
         # async_poll_now swallows the failure so a multi-vehicle poll can carry
         # on to the next car. Here someone is watching, so say so.
         if not await async_poll_now(
-            self.hass, self.coordinator.config_entry, self.coordinator, [vehicle]
+            self.hass,
+            self.coordinator.config_entry,
+            self.coordinator,
+            [vehicle],
+            context=self._context,
         ):
             raise HomeAssistantError(f"{self._attr_name}: the vehicle did not respond")

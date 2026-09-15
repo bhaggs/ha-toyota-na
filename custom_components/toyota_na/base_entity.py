@@ -33,6 +33,15 @@ class ToyotaNABaseEntity(CoordinatorEntity[list[ToyotaVehicle]]):
         self._attr_name = name
         self.vin = vin
 
+    def _handle_coordinator_update(self) -> None:
+        # Apply the cause the coordinator worked out for this vehicle's update,
+        # at the moment of the write. Any earlier does not work: an entity drops
+        # a context five seconds after it is set, and a poll waits ten before
+        # the new data arrives. See coordinator.py.
+        if context := getattr(self.coordinator, "update_contexts", {}).get(self.vin):
+            self.async_set_context(context)
+        super()._handle_coordinator_update()
+
     def feature(self, feature: VehicleFeatures):
         """Return the feature dict."""
         if self.vehicle is None:

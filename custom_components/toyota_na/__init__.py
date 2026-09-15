@@ -39,7 +39,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import device_registry as dr, service
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .websocket_handler import ToyotaWebSocketHandler
 
@@ -57,6 +57,7 @@ from .const import (
     REFRESH,
     SEND_COMMAND,
 )
+from .coordinator import ToyotaCoordinator
 from .polling import (
     async_poll_now,
     fetch_interval,
@@ -107,6 +108,13 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
         # answered before any of the per-vehicle work below.
         if remote_action == REFRESH:
             _LOGGER.info("Handling service call %s", remote_action)
+            # Credit this call if the refresh brings a new report from the
+            # vehicle it named. Held on the coordinator, because the refresh is
+            # debounced and may run late.
+            coordinator.async_set_cause(
+                [ident[1] for ident in device.identifiers if ident[0] == DOMAIN],
+                service_call.context,
+            )
             await coordinator.async_request_refresh()
             return
 
@@ -120,9 +128,14 @@ async def async_setup(hass: HomeAssistant, _processed_config) -> bool:
                     if remote_action == POLL_VEHICLE:
                         # Deliberately not gated on the poll interval: an
                         # explicit call is not a scheduled wake. It does record
-                        # the poll, so it defers the next scheduled one.
+                        # the poll, so it defers the next scheduled one - and
+                        # its context, so Activity details credits the caller.
                         await async_poll_now(
-                            hass, coordinator.config_entry, coordinator, [vehicle]
+                            hass,
+                            coordinator.config_entry,
+                            coordinator,
+                            [vehicle],
+                            context=service_call.context,
                         )
                     else:
                         await vehicle.send_command(COMMAND_MAP[remote_action])
@@ -220,7 +233,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         # sending the user through a one-time-code login over a server blip.
         raise ConfigEntryNotReady(e) from e
 
-    coordinator = DataUpdateCoordinator(
+    coordinator = ToyotaCoordinator(
         hass,
         _LOGGER,
         # Passed explicitly rather than left to the ContextVar fallback, which
@@ -341,7 +354,8 @@ async def async_scheduled_poll(hass: HomeAssistant, entry: ConfigEntry):
             vehicle.model_year,
             vehicle.model_name,
         )
-    await async_poll_now(hass, entry, coordinator, due)
+    # Nothing started this poll, so it names itself as the cause.
+    await async_poll_now(hass, entry, coordinator, due, scheduled=True)
 
 
 async def update_vehicles_status(hass: HomeAssistant, client: OneClient, entry: ConfigEntry):

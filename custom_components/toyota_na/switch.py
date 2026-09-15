@@ -105,6 +105,9 @@ class ToyotaRemoteStartSwitch(ToyotaNABaseEntity, SwitchEntity):
         await self._send(ENGINE_STOP, False)
 
     async def _send(self, action: str, optimistic: bool) -> None:
+        # Captured before any awaiting: the entity drops it five seconds after
+        # the call began, and the vehicle's report arrives well after that.
+        context = self._context
         vehicle = self.vehicle
         if vehicle is None:
             raise HomeAssistantError(
@@ -124,6 +127,8 @@ class ToyotaRemoteStartSwitch(ToyotaNABaseEntity, SwitchEntity):
         self._optimistic = optimistic
         self.async_write_ha_state()
         await asyncio.sleep(COMMAND_SETTLE_SECONDS)
+        # Credit the vehicle's next report to whoever sent the command.
+        self.coordinator.async_set_cause([self.vin], context)
         await self.coordinator.async_request_refresh()
 
     def _handle_coordinator_update(self) -> None:

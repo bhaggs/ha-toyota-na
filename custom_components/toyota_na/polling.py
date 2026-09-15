@@ -83,13 +83,21 @@ def record_polled(hass: HomeAssistant, entry: ConfigEntry, vins: list[str]) -> N
     )
 
 
-async def async_poll_now(hass, entry, coordinator, vehicles) -> bool:
+async def async_poll_now(
+    hass, entry, coordinator, vehicles, *, context=None, scheduled=False
+) -> bool:
     """Wake these vehicles, record it, and re-read once they have uploaded.
 
     The single path every poll takes - scheduled, button, and service. The
     timestamp write lives here specifically so no caller can forget it, which is
     how the button and the service came to wake the vehicle without deferring
     the next scheduled poll.
+
+    `context` is whatever started the poll - a button press or a service call -
+    so Activity details can credit it. `scheduled` marks the poll nothing
+    started, which names itself as the cause instead. It is explicit rather than
+    inferred from a missing context, so a press that somehow arrives without one
+    is left uncredited instead of being mislabelled as a scheduled poll.
 
     Returns whether anything actually woke. The interval is deliberately not
     consulted: callers that should respect it check before calling, and a
@@ -100,6 +108,9 @@ async def async_poll_now(hass, entry, coordinator, vehicles) -> bool:
         return False
 
     record_polled(hass, entry, polled)
+    # Beside the timestamp, for the same reason: only for vehicles that actually
+    # woke, and in the one place no caller can skip.
+    coordinator.async_vehicles_polled(polled, context, scheduled=scheduled)
     # Push what we already hold so the UI reacts immediately, then re-read once
     # the vehicle has had time to upload.
     coordinator.async_set_updated_data(coordinator.data)

@@ -103,17 +103,22 @@ class ToyotaLock(ToyotaNABaseEntity, LockEntity):
     async def toggle_lock(self, command: str):
         """Set the lock state via the provided command string."""
         if self.vehicle is not None:
+            # Captured now: the entity drops it five seconds after the call
+            # began, long before the vehicle's confirmation comes back.
+            context = self._context
             self._state_changing = True
             self.async_write_ha_state()
             await self.vehicle.send_command(COMMAND_MAP[command])
-            self.hass.async_create_task(self._background_refresh())
+            self.hass.async_create_task(self._background_refresh(context))
 
-    async def _background_refresh(self):
+    async def _background_refresh(self, context=None):
         """Poll for updated vehicle state after a command, then refresh the coordinator."""
         try:
             await self.vehicle.poll_vehicle_refresh()
             await asyncio.sleep(REFRESH_SETTLE_SECONDS)
             self._state_changing = False
+            # Credit the confirmed state to whoever locked or unlocked.
+            self.coordinator.async_set_cause([self.vin], context)
             await self.coordinator.async_request_refresh()
         except Exception:
             self._state_changing = False
