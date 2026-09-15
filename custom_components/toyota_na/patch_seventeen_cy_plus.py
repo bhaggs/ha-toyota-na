@@ -159,9 +159,20 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
             _LOGGER.debug("Error parsing electric status: %s", e)
             pass
 
-    async def poll_vehicle_refresh(self) -> None:
-        """Instructs Toyota's systems to ping the vehicle to upload a fresh status."""
-        # GraphQL refresh flow: pre-wake -> confirm subscription -> refresh
+    async def poll_vehicle_refresh(self) -> bool:
+        """Ask the vehicle to upload fresh status. Returns whether that was accepted.
+
+        Two refresh requests go out: the GraphQL one the current app uses, and
+        the older REST one kept alongside it. Either being accepted counts.
+
+        Every step used to swallow its error, so a poll the servers refused
+        outright - most often for rate limiting - was recorded as a success: it
+        deferred the next scheduled poll and reported success on the button.
+        """
+        # GraphQL refresh flow: pre-wake -> confirm subscription -> refresh. The
+        # first two only prepare the way, and confirm routinely fails with
+        # "Device limit exceeded" while refreshes still work, so neither of them
+        # decides the outcome.
         try:
             guid = await self._client.auth.get_guid()
             await self._client.graphql_pre_wake(guid)
@@ -173,16 +184,16 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         except Exception as e:
             _LOGGER.debug("GraphQL confirm subscription failed: %s", e)
 
+        refusals = []
         try:
             await self._client.graphql_refresh_status(self._vin)
         except Exception as e:
-            _LOGGER.debug("GraphQL refresh status failed: %s", e)
+            refusals.append(("GraphQL refresh", e))
 
-        # Also do REST refresh
         try:
             await self._client.send_refresh_request_17cyplus(self._vin)
         except Exception as e:
-            _LOGGER.debug("REST refresh request failed: %s", e)
+            refusals.append(("REST refresh", e))
 
         try:
             if self._has_electric:
@@ -191,7 +202,20 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
                     self._parse_electric_status(electric_status)
         except Exception as e:
             _LOGGER.debug("Error refreshing electric status: %s", e)
-            pass
+
+        if len(refusals) == 2:
+            _LOGGER.warning(
+                "Vehicle ...%s did not accept the poll: %s. It was not counted as a poll.",
+                self._vin[-4:],
+                self._client.describe_refusal(refusals),
+            )
+            return False
+        # One refused and the other accepted is an ordinary poll - a throttled
+        # REST refresh beside an accepted GraphQL one is routine - so it stays
+        # at debug rather than alarming anyone.
+        for name, error in refusals:
+            _LOGGER.debug("%s refused, but the other refresh was accepted: %s", name, error)
+        return True
 
     async def send_command(self, command: RemoteRequestCommand) -> None:
         """Start the engine. Periodically refreshes the vehicle status to determine if the engine is running."""

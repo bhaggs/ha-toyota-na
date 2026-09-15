@@ -143,14 +143,20 @@ class SeventeenCYToyotaVehicle(ToyotaVehicle):
             _LOGGER.debug("Error parsing electric status: %s", e)
             pass
 
-    async def poll_vehicle_refresh(self) -> None:
-        """Instructs Toyota's systems to ping the vehicle to upload a fresh status."""
+    async def poll_vehicle_refresh(self) -> bool:
+        """Ask the vehicle to upload fresh status. Returns whether that was accepted."""
+        accepted = True
         try:
             await self._client.send_refresh_status(self._vin, self._generation.value)
         except Exception as e:
-            _LOGGER.warning("Vehicle refresh request failed: %s", e)
+            accepted = False
+            _LOGGER.warning(
+                "Vehicle ...%s did not accept the poll: %s. It was not counted as a poll.",
+                self._vin[-4:],
+                self._client.describe_refusal([("refresh", e)]),
+            )
 
-        """Tell Toyota to refresh electric status if applicable"""
+        # Tell Toyota to refresh electric status if applicable
         try:
             if self._has_electric:
                 # electric_status
@@ -159,7 +165,8 @@ class SeventeenCYToyotaVehicle(ToyotaVehicle):
                     self._parse_electric_status(electric_status)
         except Exception as e:
             _LOGGER.debug("Error refreshing electric status: %s", e)
-            pass
+
+        return accepted
 
     async def send_command(self, command: RemoteRequestCommand) -> None:
         """Start the engine. Periodically refreshes the vehicle status to determine if the engine is running."""

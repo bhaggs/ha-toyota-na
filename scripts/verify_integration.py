@@ -191,6 +191,7 @@ class FakeVehicle:
 
     async def poll_vehicle_refresh(self):
         self.polled += 1
+        return True
 
     async def send_command(self, command):
         pass
@@ -770,6 +771,231 @@ async def s9_logbook_end_to_end():
     )
 
 
+async def s10_refused_polls():
+    """A poll the servers refuse must not be recorded, credited, or reported as done."""
+    import json
+
+    import aiohttp
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.toyota_na.button import ToyotaButton
+    from custom_components.toyota_na.const import POLL_VEHICLE
+    from custom_components.toyota_na.oneapi import OneAuth, client as client_mod
+    from custom_components.toyota_na.oneapi.client import GraphQLError, OneClient
+    from custom_components.toyota_na.patch_seventeen_cy import SeventeenCYToyotaVehicle
+    from custom_components.toyota_na.patch_seventeen_cy_plus import (
+        SeventeenCYPlusToyotaVehicle,
+    )
+
+    vin = "JF2ZCACC1R8000001"
+
+    def returning(value):
+        async def _returns(*_args, **_kwargs):
+            return value
+
+        return _returns
+
+    def rest_429():
+        return aiohttp.ClientResponseError(
+            request_info=types.SimpleNamespace(
+                real_url="https://onecdn.telematicsct.com/oneapi/v1/global/remote/refresh-status"
+            ),
+            history=(),
+            status=429,
+            message="Too Many Requests",
+        )
+
+    def fake_client(graphql=None, rest=None, legacy=None):
+        async def outcome(error):
+            if error is not None:
+                raise error
+            return {}
+
+        return types.SimpleNamespace(
+            auth=types.SimpleNamespace(get_guid=returning("guid")),
+            graphql_pre_wake=_noop,
+            graphql_confirm_subscription=_noop,
+            graphql_refresh_status=lambda _vin: outcome(graphql),
+            send_refresh_request_17cyplus=lambda _vin: outcome(rest),
+            send_refresh_status=lambda _vin, _generation: outcome(legacy),
+            describe_refusal=OneClient.describe_refusal,
+        )
+
+    def vehicle(cls, client):
+        built = object.__new__(cls)
+        built._client = client
+        built._vin = vin
+        built._has_electric = False
+        built._features = {}
+        built._generation = ApiVehicleGeneration.CY17
+        return built
+
+    class Warnings(logging.Handler):
+        def __init__(self):
+            super().__init__(logging.WARNING)
+            self.messages = []
+
+        def emit(self, record):
+            self.messages.append(record.getMessage())
+
+    warnings = Warnings()
+    package_log = logging.getLogger("custom_components.toyota_na")
+    package_log.addHandler(warnings)
+
+    async def attempt(built):
+        warnings.messages.clear()
+        return await built.poll_vehicle_refresh(), list(warnings.messages)
+
+    try:
+        plus = SeventeenCYPlusToyotaVehicle
+        ok, logged = await attempt(vehicle(plus, fake_client()))
+        check("both refreshes accepted: accepted, no warning", ok is True and not logged, str(logged))
+
+        ok, logged = await attempt(vehicle(plus, fake_client(rest=rest_429())))
+        check("GraphQL accepted, REST throttled (mmiller7's log): still accepted", ok is True)
+        check("...and no warning for a poll that worked", not logged, str(logged))
+
+        ok, logged = await attempt(
+            vehicle(plus, fake_client(graphql=GraphQLError("RefreshVehicleStatus", 429, ""), rest=rest_429()))
+        )
+        check("both throttled: refused", ok is False)
+        check("...with one warning naming the rate limit", len(logged) == 1 and "rate-limited" in logged[0], str(logged))
+        check("...and the VIN masked to its last four", bool(logged) and vin not in logged[0] and "...0001" in logged[0])
+
+        ok, logged = await attempt(
+            vehicle(
+                plus,
+                fake_client(graphql=GraphQLError("RefreshVehicleStatus", None, "Unauthorized: denied"), rest=rest_429()),
+            )
+        )
+        check("refused for different reasons: refused", ok is False)
+        check(
+            "...listing both, without claiming a rate limit",
+            len(logged) == 1
+            and "GraphQL refresh" in logged[0]
+            and "REST refresh" in logged[0]
+            and "rate-limited" not in logged[0],
+            str(logged),
+        )
+
+        ok, logged = await attempt(vehicle(SeventeenCYToyotaVehicle, fake_client(legacy=rest_429())))
+        check("17CY throttled: refused, with a rate-limit warning", ok is False and len(logged) == 1 and "rate-limited" in logged[0], str(logged))
+        ok, logged = await attempt(vehicle(SeventeenCYToyotaVehicle, fake_client()))
+        check("17CY accepted: accepted, no warning", ok is True and not logged)
+    finally:
+        package_log.removeHandler(warnings)
+
+    check(
+        "'Device limit exceeded' is not treated as a rate limit",
+        not OneClient.is_rate_limited(
+            GraphQLError("ConfirmSubscriptionStatus", None, "APPSYNC-429: Device limit exceeded")
+        ),
+    )
+
+    print("   -- graphql_request refusal modes --")
+
+    def fake_session(status, body):
+        class Response:
+            async def text(self):
+                return body
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                return False
+
+        Response.status = status
+
+        class Session:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                return False
+
+            def post(self, *_args, **_kwargs):
+                return Response()
+
+        return Session
+
+    auth = OneAuth(brand="S")
+    auth.get_access_token = returning("token")
+    auth.get_guid = returning("guid")
+    client = OneClient(auth)
+    secret = f'{{"message": "Rate limit exceeded for vin {vin}"}}'
+
+    async def refresh_error():
+        try:
+            await client.graphql_refresh_status(vin)
+        except GraphQLError as error:
+            return error
+        return None
+
+    with patch.object(client_mod.aiohttp, "ClientSession", fake_session(429, secret)):
+        check(
+            "default mode still returns None (pre-wake, confirm, websocket unchanged)",
+            await client.graphql_request("SendPreWakeCommand", "query", {"guid": "g"}) is None,
+        )
+        error = await refresh_error()
+        check("the refresh raises GraphQLError on HTTP 429", error is not None and error.status == 429)
+        check("...recognised as rate limiting", error is not None and OneClient.is_rate_limited(error))
+        check(
+            "...with no response body or VIN in its message",
+            error is not None and secret not in str(error) and vin not in str(error),
+            str(error),
+        )
+
+    errors_body = json.dumps({"errors": [{"errorType": "Unauthorized", "message": "denied"}]})
+    with patch.object(client_mod.aiohttp, "ClientSession", fake_session(200, errors_body)):
+        error = await refresh_error()
+        check(
+            "a GraphQL error inside HTTP 200 also raises, and is not a rate limit",
+            error is not None and error.status is None and not OneClient.is_rate_limited(error),
+            str(error),
+        )
+
+    print("   -- a refused poll is neither recorded nor credited --")
+    hass = new_hass()
+    stub_config_entries(hass)
+    refused = FakeVehicle("VINREFUSEDREFUSED")
+
+    async def refuse():
+        refused.polled += 1
+        return False
+
+    refused.poll_vehicle_refresh = refuse
+    entry = fake_entry(options={"poll_interval": 2})
+    coordinator = make_coordinator(hass, entry, [refused])
+    coordinator.async_request_refresh = _noop
+    hass.data[DOMAIN] = {"e1": {"coordinator": coordinator}}
+    fired = []
+    hass.bus.async_listen(EVENT_VEHICLE_POLLED, collect(fired.append))
+
+    with fast_sleep(), fake_device_registry():
+        await async_scheduled_poll(hass, entry)
+        await hass.async_block_till_done()
+    check("the vehicle was asked", refused.polled == 1)
+    check("...but nothing was recorded, so the next tick tries again", poll_due(entry, refused.vin, timedelta(hours=2)))
+    check("...no cause is pending", refused.vin not in coordinator.pending_causes)
+    check("...and no event claims the vehicle was woken", fired == [])
+
+    button = ToyotaButton(
+        POLL_VEHICLE, "mdi:car-connected", coordinator, "poll_vehicle", "Poll vehicle", refused.vin
+    )
+    button.hass = hass
+    message = None
+    with fast_sleep(), fake_device_registry():
+        try:
+            await button.async_press()
+        except HomeAssistantError as error:
+            message = str(error)
+    check("pressing Poll vehicle reports the refusal", message is not None and "rate-limiting" in message, str(message))
+
+
 SECTIONS = [
     ("1. async_setup, services, options flow", s1_setup_and_services),
     ("2. interval options matrix", s2_interval_matrix),
@@ -780,6 +1006,7 @@ SECTIONS = [
     ("7. poll interval as a staleness floor", s7_staleness_floor),
     ("8. cause routing for Activity details", s8_cause_routing),
     ("9. Activity details end to end, through the recorder and logbook", s9_logbook_end_to_end),
+    ("10. refused polls are not counted", s10_refused_polls),
 ]
 
 

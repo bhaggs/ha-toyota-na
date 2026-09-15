@@ -138,8 +138,14 @@ class ToyotaVehicle(ABC):
         self._region = region
 
     @abstractmethod
-    async def poll_vehicle_refresh(self) -> None:
-        """Instructs Toyota's systems to ping the vehicle to upload a fresh status. Useful when certain actions have been taken, such as locking or unlocking doors."""
+    async def poll_vehicle_refresh(self) -> bool:
+        """Ask the vehicle to upload fresh status, and say whether that was accepted.
+
+        Return True only if the servers accepted a refresh request, and do not
+        raise for a refusal. Callers record an accepted poll, defer the next
+        scheduled one, and name it as a cause in Activity details - so a refused
+        request reported as accepted is a false record, not a harmless one.
+        """
         pass
 
     @abstractmethod
