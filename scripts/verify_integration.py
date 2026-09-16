@@ -749,7 +749,7 @@ async def s9_logbook_end_to_end():
     check("scheduled poll row: context_domain", polled.get("context_domain") == DOMAIN)
     check("scheduled poll row: context_event_type", polled.get("context_event_type") == EVENT_VEHICLE_POLLED)
     reported = by_state.get("reported", {})
-    check("vehicle report row: context_name", reported.get("context_name") == "New report from the vehicle", str(reported))
+    check("vehicle report row: context_name", reported.get("context_name") == "Cloud refresh", str(reported))
     check("vehicle report row: context_domain", reported.get("context_domain") == DOMAIN)
     # What Activity details reads to show "By <person> - Action used: Press".
     pressed = by_state.get("pressed", {})

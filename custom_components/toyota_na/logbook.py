@@ -44,12 +44,18 @@ def async_describe_events(
 
     @callback
     def async_describe_report(event: Event) -> dict[str, str]:
+        # Named for the mechanism, matching the Refresh button, because the
+        # dialog shows this name and nothing else: the reader needs to see that
+        # the value came from the servers rather than from waking the vehicle.
+        #
         # "Picked up", never a reason. The gateway says that the vehicle sent a
         # report, not why - after a drive and after the Subaru app asked for one
         # look exactly the same from here.
         return {
-            LOGBOOK_ENTRY_NAME: "New report from the vehicle",
-            LOGBOOK_ENTRY_MESSAGE: f"picked up for {_vehicle_name(event)}",
+            LOGBOOK_ENTRY_NAME: "Cloud refresh",
+            LOGBOOK_ENTRY_MESSAGE: (
+                f"picked up a new report from {_vehicle_name(event)}"
+            ),
         }
 
     async_describe_event(DOMAIN, EVENT_VEHICLE_POLLED, async_describe_polled)
