@@ -37,7 +37,7 @@
             "poll_interval": "Poll the vehicle if unpolled for"
           },
           "data_description": {
-            "fetch_interval": "How often to re-read the servers. Set to 0 to never refresh on a schedule; the Refresh button and toyota_na.refresh still work.",
+            "fetch_interval": "How often to re-read the servers. About 5 minutes is the recommended minimum. Set to 0 to never refresh on a schedule; the Refresh button and toyota_na.refresh still work.",
             "poll_interval": "Wakes the vehicle if nothing has polled it for this long. The Poll vehicle button and toyota_na.poll_vehicle count, so an automation that polls on arrival pushes the next scheduled poll back instead of being followed by a second wake. Set to 0 to never wake it on a schedule."
           }
         }

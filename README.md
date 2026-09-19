@@ -77,6 +77,12 @@ Two things happen on a timer, and only one of them touches the vehicle.
 Both are configurable. Go to **Settings → Devices & Services → Toyota / Subaru
 (North America) → Configure**, and set either to **0 to turn it off entirely**.
 
+**About 5 minutes is the recommended minimum for Refresh.** No limit is
+published anywhere, but these reads share a rate allowance with the requests a
+poll sends to the vehicle, and intervals as short as two minutes have been seen
+to draw `429 Too Many Requests` refusals — which show up against the *poll*,
+not the refresh, so the cause is easy to miss.
+
 The poll interval is a **staleness floor, not a fixed cadence**: it wakes the
 vehicle only if nothing has polled it for that long. The Poll vehicle button and
 `toyota_na.poll_vehicle` count, so an automation that polls when you get home
@@ -108,8 +114,11 @@ actions:
       vehicle: <device id>
 ```
 
-`sensor.<your_car>_last_updated` is the vehicle's own report timestamp, so it is
-the right thing to test against for "poll only if nothing has come in lately":
+`sensor.<your_car>_last_updated` carries the timestamp inside the vehicle's
+telemetry record, so it is the right thing to test against for "poll only if
+nothing has come in lately". It does not move when only the charging data
+changes — see ["Last updated" looks out of
+date](#last-updated-looks-out-of-date):
 
 ```yaml
 conditions:
@@ -174,6 +183,37 @@ for updates" option is off for this entry, so no scheduled refresh will happen.
 With debug on, you also get a line per cloud read (`Updating vehicle status`)
 and the reason a scheduled poll was skipped (`Skipping scheduled poll; last one
 was N minutes ago` — the guard that stops a restart loop becoming a wake loop).
+
+### "Last updated" looks out of date
+
+`Last updated` is not "when anything last changed". It is the `lastTimestamp`
+field inside the vehicle's **telemetry** record, and the vehicle sends several
+independent records that refresh at different moments:
+
+| What you see | Comes from | Moves when |
+|---|---|---|
+| **Last updated**, odometer, range, location, tire pressures | telemetry | the vehicle uploads new telemetry |
+| Battery level, charging plug and connector, charging time | electric status | the vehicle reports a charging change |
+| Doors, locks, windows, hood, hatch | remote status | the vehicle reports an opening change |
+
+So a charge finishing can move the battery level while **Last updated** stays
+where it was — the charge updated the electric record, not telemetry. Nothing is
+out of sync; those are simply different records. The connected-services platform
+exposes no timestamp of its own for the electric record, so there is nothing the
+integration can show for "when the charging data was measured".
+
+The same explains a poll that appears to update only some values. **Poll
+vehicle** asks the vehicle to upload, which moves telemetry and so **Last
+updated**, but the electric data is fetched by a separate request with its own
+rate limit. With debug logging on, a throttled one reads:
+
+```
+API error: POST .../v2/electric/realtime-status -> 429 Too Many Requests | Rate limit exceeded
+Electric realtime status failed: 429, message='Too Many Requests'
+```
+
+The poll still worked. The EV values simply wait for an ordinary refresh to
+bring whatever the servers hold.
 
 ### Setup fails, or no vehicles appear
 

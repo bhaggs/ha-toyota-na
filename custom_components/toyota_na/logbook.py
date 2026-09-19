@@ -38,7 +38,7 @@ def async_describe_events(
     @callback
     def async_describe_polled(event: Event) -> dict[str, str]:
         return {
-            LOGBOOK_ENTRY_NAME: "Scheduled vehicle poll",
+            LOGBOOK_ENTRY_NAME: "Scheduled poll vehicle",
             LOGBOOK_ENTRY_MESSAGE: f"woke {_vehicle_name(event)}",
         }
 

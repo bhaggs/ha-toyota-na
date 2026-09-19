@@ -745,7 +745,7 @@ async def s9_logbook_end_to_end():
     by_state = {row.get("state"): row for row in rows if row.get("entity_id") == entity_id}
 
     polled = by_state.get("polled", {})
-    check("scheduled poll row: context_name", polled.get("context_name") == "Scheduled vehicle poll", str(polled))
+    check("scheduled poll row: context_name", polled.get("context_name") == "Scheduled poll vehicle", str(polled))
     check("scheduled poll row: context_domain", polled.get("context_domain") == DOMAIN)
     check("scheduled poll row: context_event_type", polled.get("context_event_type") == EVENT_VEHICLE_POLLED)
     reported = by_state.get("reported", {})
