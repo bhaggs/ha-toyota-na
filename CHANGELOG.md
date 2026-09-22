@@ -16,8 +16,6 @@ Nothing yet.
 
 ## [2.7.0-subaru.18] - 2026-09-19
 
-*Pre-release.*
-
 ### Added
 
 - Activity details names what caused each update (Home Assistant 2026.9):
