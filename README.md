@@ -56,11 +56,64 @@ minutes remaining and as the moment charging finishes.
 
 Every control is available both as an entity and as a service.
 
+### Charging sensor values
+
+The gateway reports charging state as bare numbers, with no published list of
+what they mean. The integration translates the ones seen on real vehicles, by
+this integration's users. Anything else shows as
+the raw number. Each of these sensors also carries
+its number as a `code` attribute.
+
+**Charging plug**: the charge port.
+
+| State | Code | Seen when |
+|---|---|---|
+| Unplugged | 12 | No cable. |
+| Plugged in | 36 | Plugged in but not charging, such as waiting on a charge schedule. |
+| Charging | 40 | Charging from an AC charger (confirmed on Level 1). |
+| Charging ended | 45 | Still plugged in after a session stops. It doesn't say why: a full battery and a charger losing power both read 45. |
+| DC charging | 56 | DC fast charging started by Plug & Charge. |
+| DC charging | 60 | DC fast charging started from the app. |
+
+**Charging connector**: the latch that holds the cable in.
+
+| State | Code | Seen when |
+|---|---|---|
+| Disconnected | 2 | No cable. |
+| Unlocked | 4 | Latch released. |
+| Locked | 5 | Cable latched, as it is while charging, on AC or DC. |
+
+The **Charging** binary sensor is on when the connector reads Locked. That
+measures the latch rather than the flow of power, so to tell whether the vehicle
+is actually charging, and whether on AC or DC, use Charging plug.
+
+**Charging type**: always 15 so far: unplugged, on Level 1, and throughout a DC
+fast charge. These vehicles don't appear to fill it in, so don't build
+automations on it; Charging plug tells AC from DC. If yours ever shows anything
+other than 15, please add it to
+[#3](https://github.com/bhaggs/ha-toyota-na/issues/3).
+
+In automations, match the `code` attribute rather than the state. The words may
+be reworded as more is learned; the codes won't change.
+
+```yaml
+# Notify when a charging session stops
+triggers:
+  - trigger: state
+    entity_id: sensor.solterra_charging_plug
+    attribute: code
+    to: 45
+```
+
+These readings change only when the vehicle reports, so they can lag while it's
+parked. See ["Last updated" looks out of date](#last-updated-looks-out-of-date).
+A value the integration doesn't recognise is logged once, with a request to
+report it on [#3](https://github.com/bhaggs/ha-toyota-na/issues/3).
+
 ### Known gaps
 
-- **`Charging type`** still reports a raw integer; `Charging plug` and `Charging
-  connector` are decoded.
-  ([#3](https://github.com/bhaggs/ha-toyota-na/issues/3))
+- **`Charging type`** always reads 15, even while DC fast charging. See
+  [Charging sensor values](#charging-sensor-values).
 - **Key fob battery** appears in the app but not here. It was
   advertised in the upstream README for years and never implemented; the data may
   live in the unused `v1/vehiclehealth/*` endpoints.
@@ -78,10 +131,9 @@ Both are configurable. Go to **Settings → Devices & Services → Toyota / Suba
 (North America) → Configure**, and set either to **0 to turn it off entirely**.
 
 **About 5 minutes is the recommended minimum for Refresh.** No limit is
-published anywhere, but these reads share a rate allowance with the requests a
-poll sends to the vehicle, and intervals as short as two minutes have been seen
-to draw `429 Too Many Requests` refusals — which show up against the *poll*,
-not the refresh, so the cause is easy to miss.
+published, but the servers do refuse requests they consider too frequent (`429
+Too Many Requests`); the refusals seen so far came from polling the vehicle
+several times within a few minutes.
 
 The poll interval is a **staleness floor, not a fixed cadence**: it wakes the
 vehicle only if nothing has polled it for that long. The Poll vehicle button and
@@ -150,6 +202,10 @@ logger:
   logs:
     custom_components.toyota_na: debug
 ```
+
+Gateway failures log method, URL, status, and a truncated body. Full response
+bodies are never logged at any level — they contain VIN, precise location, and
+account details.
 
 ### Nothing is updating on its own
 
@@ -235,18 +291,6 @@ requirements if the backend shifts.
 
 A successful login with an empty vehicle list almost always means a missing
 `X-APPBRAND` header or a skipped account bootstrap.
-
-### Debug logging
-
-```yaml
-logger:
-  logs:
-    custom_components.toyota_na: debug
-```
-
-Gateway failures log method, URL, status, and a truncated body. Full response
-bodies are never logged at any level — they contain VIN, precise location, and
-account details.
 
 ### Identifying unknown commands
 

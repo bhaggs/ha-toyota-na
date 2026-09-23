@@ -33,8 +33,8 @@ Nothing yet.
   automation polling on arrival no longer gets a second wake minutes later.
 - Poll times are tracked per VIN, so polling one vehicle no longer defers another
   on the same account.
-- The Refresh option recommends about 5 minutes as a minimum. These reads share a
-  rate allowance with requests sent to the vehicle.
+- The Refresh option recommends about 5 minutes as a minimum, as a precaution
+  against the servers' rate limiting.
 
 ### Fixed
 

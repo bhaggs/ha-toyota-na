@@ -46,13 +46,6 @@ seen at a DC fast charger - 56 with Plug & Charge, 60 with an app-started
 session. They share a label because the distinction is how the session was
 authorized, not what the vehicle is doing.
 
-Corroborated on a Solterra: 40 through a Level 1 session, 12 unplugged.
-
-45 is labelled "Charging ended" rather than #86's "Done Charging but plugged in".
-Cutting power to the EVSE mid-session also produced 45, so the code does not
-distinguish a full battery from an interrupted session, and a label implying it
-charged to full would be asserting more than the value carries.
-
 The values look like packed flags rather than a flat enum: 32 is set on every
 plugged state and clear only on 12, and 16 is set only on the two DC readings.
 Six samples is not enough to decode the rest, so they are treated as an enum for
@@ -69,10 +62,10 @@ two readings equally well:
 - a field this vehicle does not populate, 15 being the all-bits-set "unknown"
   idiom at 4 bit width, the same shape as the 65535 sentinel elsewhere here.
 
-The second looks more likely, since a live charge-type reading should have shown
-something Level 1 specific during a Level 1 charge. A DC fast charging session
-would settle it: a change means it is live, another 15 means it is static or
-unreported and the sensor is measuring nothing.
+A DC fast charging session settled it: 15 throughout, at a Tesla Supercharger on
+a 2026 Solterra, while Charging plug read DC charging and the connector read
+Locked. On that vehicle the field is static or unreported, and Charging plug is
+what tells AC from DC. The entity stays until other vehicles confirm the same.
 
 Empty rather than absent so the sensor already routes through the decoder. The
 raw value is exposed as an attribute, unknown values are reported, and mapping
@@ -82,9 +75,7 @@ one later is a line in this dict rather than a change in shape.
 UNAVAILABLE_UINT16 = 65535
 """0xFFFF, the "not applicable" sentinel for 16-bit fields.
 
-Observed on a Solterra: remainingChargeTime reads 65535 while unplugged. Taken
-at face value it renders as a real reading - 45 days or 18 hours depending on
-the unit - and would poison any statistics derived from it.
+Observed on a Solterra: remainingChargeTime reads 65535 while unplugged.
 """
 
 
