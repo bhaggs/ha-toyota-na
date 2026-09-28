@@ -16,6 +16,19 @@ load-bearing, since that is undocumented and has changed before.
 Prints counts, generations, and masked VINs only. Response bodies from this API
 carry full VINs, precise location, and account details, so they are never
 printed in full even at --verbose.
+
+--probe asks, read-only, which endpoints the North American gateway serves for
+each vehicle, and prints the shape of what comes back (key names and types,
+never values). The candidates come from the European integration
+(pytoyoda/ha_toyota), which runs on the same platform with more features. It
+also prints the charging-schedule and climate fields of the EV status in full,
+since those hold settings rather than identity and can't be decoded from shape.
+
+--climate-write-test is the one flag here that writes. It checks whether the
+saved remote-climate settings can be changed, by the PUT the European
+integration used before July 2026: it raises the target temperature by 1
+degree, reads it back, and restores the original. Settings only apply the next
+time remote climate starts, so nothing reaches the vehicle. It asks first.
 """
 import argparse
 import asyncio
@@ -23,6 +36,7 @@ import getpass
 import json
 import logging
 import sys
+from datetime import date, timedelta
 from urllib.parse import parse_qs, urlencode, urlparse
 
 try:
@@ -64,6 +78,109 @@ BRANDS = {
 def mask_vin(vin):
     """VINs identify a specific car and its owner - show only the last 4."""
     return f"...{vin[-4:]}" if vin else "???"
+
+
+def _trips_endpoint():
+    """The last week's trip summaries, without routes, as the EU app asks."""
+    today = date.today()
+    return "v1/trips?" + urlencode({
+        "from": (today - timedelta(days=7)).isoformat(),
+        "to": today.isoformat(),
+        "route": "false",
+        "summary": "true",
+        "limit": 5,
+        "offset": 0,
+    })
+
+
+# (label, endpoint) - GETs only. Every one reads; none reaches the vehicle.
+PROBE_ENDPOINTS = [
+    # Climate state and settings: target temperature, defrost, seat and
+    # steering heaters, and (EU) the cabin temperature. The v1/vehicle/* paths
+    # are where Toyota EU moved in July 2026; the v1/global/remote/* ones are
+    # where they were before.
+    ("climate status", "v1/vehicle/climate-status"),
+    ("climate settings", "v1/vehicle/climate-settings"),
+    ("climate status (older path)", "v1/global/remote/climate-status"),
+    ("climate settings (older path)", "v1/global/remote/climate-settings"),
+    # Warning lights, oil, and possibly the key fob battery. The integration's
+    # client has methods for both and nothing calls them.
+    ("vehicle health status", "v1/vehiclehealth/status"),
+    ("vehicle health report", "v1/vehiclehealth/report"),
+    ("notification history", "v2/notification/history"),
+    ("trips, last 7 days", _trips_endpoint()),
+    ("service history", "v1/servicehistory/vehicle/summary"),
+    # What the Remote start switch reads its on/off state from.
+    ("remote start status", "v1/global/remote/engine-status"),
+    # Where Toyota EU reads door/lock status since July 2026. Serving it here
+    # would be early warning that NA may follow.
+    ("vehicle status (EU path)", "v1/vehicle/status"),
+]
+
+# Values printed alongside the shape, for endpoints whose fields can't be
+# decoded from key names alone. ALL prints the whole payload; otherwise a tuple
+# of key prefixes. Only settings and status go here - never the VIN, location,
+# odometer or anything else that identifies the car or its owner.
+ALL = "all"
+PROBE_VALUES = {
+    # Climate settings: the target temperature and what each of the four
+    # acOperations categories is. Temperatures and switches only.
+    "v1/vehicle/climate-settings": ALL,
+    "v1/global/remote/climate-settings": ALL,
+    # Remote start status: on/off, start time and minutes remaining. The
+    # payload also carries the VIN, so name the fields rather than print ALL.
+    "v1/global/remote/engine-status": ("status", "date", "timer"),
+    # Key fob battery and warning lights. Leaves out vin, mileage and fuel.
+    "v1/vehiclehealth/status": ("smartKeyBat", "warning", "wnglastUpdTime"),
+    # Recalls, service campaigns and alerts, and when the report was generated
+    # (auditTrail.vhrgenTime), to see whether it is current. Leaves out
+    # vehicleDetails and maintenanceInformation, which carry the VIN and mileage.
+    "v1/vehiclehealth/report": (
+        "status", "auditTrail", "recallsListExists", "campaignsExists",
+        "vehicleAlertsExists", "safetyRecallsList", "serviceCampaignList",
+        "serviceCampaigns",
+        "vehicleAlertList",
+        # The key fob as the app's Health tab shows it, nested in vehicleStatus.
+        "vehicleStatus.smartKeyBatteryTitle",
+        "vehicleStatus.smartKeyBatteryDesc",
+        "vehicleStatus.smartKeyBatteryDegStatus",
+    ),
+}
+
+# Printed in full, not as a shape: settings, not identity, and meaningless
+# without the values. Paths are into the v2/electric/status payload.
+PROBE_VALUE_FIELDS = [
+    # When the vehicle took this reading. Without it, an unchanged value can't
+    # be told apart from a stale one.
+    ("reading taken at", ("vehicleInfo", "acquisitionDatetime")),
+    ("charging schedule", ("vehicleInfo", "timerChargeInfo")),
+    ("charging schedule slots", ("vehicleInfo", "maxNoOfChargeSchedules")),
+    ("remote climate", ("vehicleInfo", "remoteHvacInfo")),
+]
+
+
+def shape(value, depth=0, max_depth=4):
+    """Describe a payload by key names and types, never values.
+
+    Lists show their length and the shape of the first item, which is enough to
+    see what an endpoint offers without printing anything personal.
+    """
+    pad = "  " * depth
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        if depth >= max_depth:
+            return "{...}"
+        lines = [
+            f"{pad}  {key}: {shape(item, depth + 1, max_depth).lstrip()}"
+            for key, item in value.items()
+        ]
+        return "\n" + "\n".join(lines)
+    if isinstance(value, list):
+        if not value:
+            return "[] (empty)"
+        return f"list of {len(value)}, first:" + shape(value[0], depth, max_depth)
+    return "null" if value is None else type(value).__name__
 
 
 class Validator:
@@ -214,6 +331,189 @@ class Validator:
                 return resp.status, None
             parsed = json.loads(body)
             return resp.status, parsed.get("payload", parsed)
+
+    async def probe_get(self, session, endpoint, vin):
+        """GET one vehicle-scoped endpoint. Returns (status, payload, error_code)."""
+        return await self.probe_request(session, "GET", endpoint, vin)
+
+    async def probe_request(self, session, method, endpoint, vin, body=None):
+        """Call one vehicle-scoped endpoint. Returns (status, payload, error_code).
+
+        The error code is the gateway's own (e.g. ONE-GLOBAL-RS-40009 or
+        APIGW-403): generic, and the quickest way to tell "not served here"
+        from "served, but not for this vehicle".
+        """
+        headers = {
+            "AUTHORIZATION": f"Bearer {self.access_token}",
+            "X-API-KEY": RESOLVER_API_KEY,
+            "X-GUID": self.guid,
+            "X-CHANNEL": "ONEAPP",
+            "x-region": "US",
+            "X-APPVERSION": "3.4.0",
+            "X-LOCALE": "en-US",
+            "User-Agent": self.user_agent(),
+            "Accept": "application/json",
+            "VIN": vin,
+            **self.brand_headers(),
+        }
+        async with session.request(
+            method, API_GATEWAY + endpoint, headers=headers, json=body
+        ) as resp:
+            body = await resp.text()
+            try:
+                parsed = json.loads(body)
+            except ValueError:
+                parsed = None
+            if resp.status >= 400:
+                code = None
+                if isinstance(parsed, dict):
+                    status = parsed.get("status")
+                    if isinstance(status, dict) and status.get("messages"):
+                        code = status["messages"][0].get("responseCode")
+                    code = code or parsed.get("code") or parsed.get("message")
+                return resp.status, None, code
+            if isinstance(parsed, dict):
+                parsed = parsed.get("payload", parsed)
+            return resp.status, parsed, None
+
+    async def run_probe(self, session, vehicles):
+        """Ask which EU-integration endpoints this gateway serves, per vehicle."""
+        for v in vehicles:
+            vin = v.get("vin")
+            print(f"  --- {v.get('modelYear', '?')} {v.get('modelName', '?')}"
+                  f"  vin={mask_vin(vin)}  gen={v.get('generation', '?')} ---\n")
+
+            for label, endpoint in PROBE_ENDPOINTS:
+                path = endpoint.split("?")[0]
+                status, payload, code = await self.probe_get(session, endpoint, vin)
+                if payload is None:
+                    detail = f"  {code}" if code else ""
+                    print(f"    [{status}] {label:<30} {path}{detail}")
+                else:
+                    print(f"    [{status}] {label:<30} {path}  SERVED:"
+                          f"{shape(payload, 2)}")
+                    wanted = PROBE_VALUES.get(path)
+                    if wanted == ALL:
+                        values = payload
+                    elif wanted and isinstance(payload, dict):
+                        top = tuple(w for w in wanted if "." not in w)
+                        values = {
+                            key: item for key, item in payload.items()
+                            if top and key.startswith(top)
+                        }
+                        # "a.b" names one nested field exactly.
+                        for dotted in (w for w in wanted if "." in w):
+                            item = payload
+                            for part in dotted.split("."):
+                                item = item.get(part) if isinstance(item, dict) else None
+                            values[dotted] = item
+                    else:
+                        values = None
+                    if values is not None:
+                        text = json.dumps(values, indent=2).replace("\n", "\n        ")
+                        print(f"      values: {text}")
+                # Stay well clear of the gateway's rate limiting.
+                await asyncio.sleep(1)
+
+            print("\n    EV status fields, in full:")
+            status, electric, code = await self.probe_get(
+                session, "v2/electric/status", vin
+            )
+            if electric is None:
+                print(f"    [{status}] v2/electric/status failed  {code or ''}")
+            else:
+                for label, path in PROBE_VALUE_FIELDS:
+                    value = electric
+                    for key in path:
+                        value = value.get(key) if isinstance(value, dict) else None
+                    text = json.dumps(value, indent=2).replace("\n", "\n        ")
+                    print(f"      {label}: {text}")
+            print()
+        print(
+            "  A 200 with a shape is served. 404 or 403 usually means not served\n"
+            "  here; other codes may be served but refused for this vehicle.\n"
+            "  To decode the charging schedule, set one in the app, press Poll\n"
+            "  vehicle in Home Assistant, then run this again and compare.\n"
+        )
+        return 0
+
+    async def run_climate_write_test(self, session, vehicles):
+        """Change the saved climate temperature by 1 degree, read it back, restore.
+
+        The body is the settings as read, minus the three range fields the read
+        adds, which is the shape the European integration's PUT sent. Restoring
+        writes the original back whether or not the change appeared to take,
+        since a write can land even when its response looks like a refusal.
+        """
+        endpoint = "v1/global/remote/climate-settings"
+        read_only = ("minTemp", "maxTemp", "tempInterval")
+        failed = False
+
+        for v in vehicles:
+            vin = v.get("vin")
+            print(f"  --- climate write test: {v.get('modelYear', '?')} "
+                  f"{v.get('modelName', '?')}  vin={mask_vin(vin)} ---\n")
+
+            status, original, code = await self.probe_get(session, endpoint, vin)
+            if not isinstance(original, dict) or original.get("temperature") is None:
+                print(f"    [{status}] can't read the settings  {code or ''}\n")
+                failed = True
+                continue
+
+            unit = original.get("temperatureUnit", "")
+            before = original["temperature"]
+            step = original.get("tempInterval") or 1
+            changed = before + step
+            if original.get("maxTemp") is not None and changed > original["maxTemp"]:
+                changed = before - step
+            print(f"    saved target temperature: {before} {unit}")
+            print(f"    will set it to {changed} {unit}, read it back, then restore "
+                  f"{before} {unit}.")
+            print("    Nothing is sent to the vehicle.")
+            if input("    Type yes to continue: ").strip().lower() != "yes":
+                print("    skipped\n")
+                continue
+
+            restore = {k: val for k, val in original.items() if k not in read_only}
+            trial = {**restore, "temperature": changed}
+
+            status, payload, code = await self.probe_request(
+                session, "PUT", endpoint, vin, trial
+            )
+            print(f"\n    [{status}] PUT {endpoint}  {code or ''}")
+            if isinstance(payload, dict) and payload:
+                print(f"      response keys: {', '.join(sorted(payload))}")
+                if "returnCode" in payload:
+                    print(f"      returnCode: {payload['returnCode']}")
+
+            await asyncio.sleep(2)
+            _, after, _ = await self.probe_get(session, endpoint, vin)
+            read_back = after.get("temperature") if isinstance(after, dict) else None
+            print(f"    read back: {read_back} {unit}")
+            if read_back == changed:
+                print("    WRITABLE: the change was saved.")
+            elif read_back == before:
+                print("    NOT WRITABLE: the setting did not change.")
+            else:
+                print("    UNCLEAR: read back neither value.")
+
+            await asyncio.sleep(1)
+            status, _, code = await self.probe_request(
+                session, "PUT", endpoint, vin, restore
+            )
+            await asyncio.sleep(2)
+            _, final, _ = await self.probe_get(session, endpoint, vin)
+            restored = final.get("temperature") if isinstance(final, dict) else None
+            if restored == before:
+                print(f"    [ok] restored to {before} {unit}\n")
+            else:
+                failed = True
+                print(
+                    f"    [!!] RESTORE FAILED (HTTP {status} {code or ''}): the saved "
+                    f"temperature reads {restored} {unit}.\n"
+                    f"         Set it back to {before} {unit} in the SubaruConnect app.\n"
+                )
+        return 1 if failed else 0
 
     async def run_matrix(self, session):
         """Probe every open question on one login, since each login costs an OTP.
@@ -432,7 +732,12 @@ class Validator:
                     f"  sub={v.get('remoteSubscriptionStatus', '?')}"
                 )
             print()
-            return 0
+            result = 0
+            if self.args.probe:
+                result = await self.run_probe(session, vehicles)
+            if self.args.climate_write_test:
+                result = await self.run_climate_write_test(session, vehicles) or result
+            return result
 
 
 def main():
@@ -459,6 +764,20 @@ def main():
         action="store_true",
         help="probe every header/bootstrap permutation on a single login, so "
         "answering all the open questions costs one OTP instead of five",
+    )
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="after discovery, check read-only which extra endpoints (climate, "
+        "vehicle health, trips, ...) this gateway serves, and print the EV "
+        "status's charging-schedule and climate fields",
+    )
+    parser.add_argument(
+        "--climate-write-test",
+        action="store_true",
+        help="WRITES: change the saved climate temperature by 1 degree, read it "
+        "back, and restore it, to test whether climate settings are writable. "
+        "Asks before writing; nothing is sent to the vehicle",
     )
     parser.add_argument(
         "--no-appbrand",
