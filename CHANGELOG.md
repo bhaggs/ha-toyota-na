@@ -12,6 +12,10 @@ be different code without colliding. For history before the fork, see
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [2.7.0-subaru.19] - 2026-09-28
+
 ### Added
 
 - **Hatch** lock, for vehicles whose listing says they take the command. It
