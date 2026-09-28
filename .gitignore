@@ -1,3 +1,5 @@
 *.pyc
 __pycache__
-.claude
+# Personal Claude Code settings stay local; the project's skills are shared.
+.claude/*
+!.claude/skills/

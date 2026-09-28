@@ -1,0 +1,15 @@
+# Tells editors which line endings to write. Pairs with .gitattributes, which
+# stops Git converting them; neither alone keeps a CRLF file CRLF.
+root = true
+
+[*]
+end_of_line = lf
+charset = utf-8
+insert_final_newline = true
+
+[*.py]
+indent_style = space
+indent_size = 4
+
+[custom_components/toyota_na/{__init__.py,base_entity.py,binary_sensor.py,config_flow.py,manifest.json,sensor.py}]
+end_of_line = crlf

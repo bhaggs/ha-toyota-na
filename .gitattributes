@@ -1,0 +1,11 @@
+# Line endings are mixed per file, a pre-existing state kept to avoid
+# whole-file diffs. LF everywhere, except these files, which are CRLF in the
+# repository and are stored byte-for-byte (-text: Git never converts them).
+* text=auto eol=lf
+
+custom_components/toyota_na/__init__.py -text
+custom_components/toyota_na/base_entity.py -text
+custom_components/toyota_na/binary_sensor.py -text
+custom_components/toyota_na/config_flow.py -text
+custom_components/toyota_na/manifest.json -text
+custom_components/toyota_na/sensor.py -text
