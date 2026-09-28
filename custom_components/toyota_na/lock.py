@@ -1,7 +1,11 @@
 import asyncio
 from typing import Any
 
-from toyota_na.vehicle.base_vehicle import ToyotaVehicle, VehicleFeatures
+from toyota_na.vehicle.base_vehicle import (
+    ApiVehicleGeneration,
+    ToyotaVehicle,
+    VehicleFeatures,
+)
 from toyota_na.vehicle.entity_types.ToyotaLockableOpening import ToyotaLockableOpening
 from toyota_na.vehicle.entity_types.ToyotaOpening import ToyotaOpening
 from toyota_na.vehicle.entity_types.ToyotaRemoteStart import ToyotaRemoteStart
@@ -23,7 +27,22 @@ from .const import (
     DOOR_LOCK,
     DOOR_UNLOCK,
     REFRESH_SETTLE_SECONDS,
+    TRUNK_LOCK,
+    TRUNK_UNLOCK,
 )
+
+
+def _has_trunk_lock(vehicle: ToyotaVehicle) -> bool:
+    """Whether the vehicle takes trunk-lock and trunk-unlock.
+
+    Only where its vehicle listing says so: the commands are confirmed on a
+    Solterra, and a vehicle that does not advertise them would refuse them.
+    The legacy 17CY protocol has no equivalent at all.
+    """
+    if vehicle.generation == ApiVehicleGeneration.CY17:
+        return False
+    capabilities = getattr(vehicle, "capabilities", None) or {}
+    return capabilities.get("trunkLockUnlockCapable") is True
 
 
 async def async_setup_entry(
@@ -41,14 +60,27 @@ async def async_setup_entry(
     for vehicle in coordinator.data:
         if vehicle.subscribed is False:
             continue
-        locks.append(
-            ToyotaLock(
-                coordinator,
-                "door_lock",
-                "Doors",
-                vehicle.vin,
-            )
+        doors = ToyotaLock(
+            coordinator,
+            "door_lock",
+            "Doors",
+            vehicle.vin,
         )
+        locks.append(doors)
+        if _has_trunk_lock(vehicle):
+            # The hatch has its own lock now, so the doors stop counting it: an
+            # unlocked hatch would otherwise show the doors as unlocked too.
+            doors.exclude_trunk = True
+            locks.append(
+                ToyotaTrunkLock(
+                    coordinator,
+                    # The gateway calls it the trunk; every vehicle this fork
+                    # supports has a hatch, so that is what it is named.
+                    "trunk_lock",
+                    "Hatch",
+                    vehicle.vin,
+                )
+            )
 
     async_add_devices(locks, True)
 
@@ -56,6 +88,7 @@ async def async_setup_entry(
 class ToyotaLock(ToyotaNABaseEntity, LockEntity):
 
     _state_changing = False
+    exclude_trunk = False
 
     def __init__(
         self,
@@ -75,8 +108,9 @@ class ToyotaLock(ToyotaNABaseEntity, LockEntity):
 
         all_locks = [
             feature
-            for feature in self.vehicle.features.values()
+            for key, feature in self.vehicle.features.items()
             if isinstance(feature, ToyotaLockableOpening)
+            and not (self.exclude_trunk and key == VehicleFeatures.Trunk)
         ]
 
         if not all_locks:
@@ -127,3 +161,31 @@ class ToyotaLock(ToyotaNABaseEntity, LockEntity):
     @property
     def available(self):
         return self.vehicle is not None
+
+
+class ToyotaTrunkLock(ToyotaLock):
+    """The hatch, locked and unlocked on its own.
+
+    Its state is the lock the vehicle reports for the trunk, the same reading
+    the Hatch lock binary sensor shows. After a command it refreshes the same
+    way the door lock does, so the state follows without pressing Refresh.
+    """
+
+    @property
+    def icon(self):
+        return "mdi:car-back"
+
+    @property
+    def is_locked(self):
+        if self.vehicle is None:
+            return None
+        trunk = self.vehicle.features.get(VehicleFeatures.Trunk)
+        if not isinstance(trunk, ToyotaLockableOpening):
+            return None
+        return trunk.locked
+
+    async def async_lock(self, **kwargs):
+        await self.toggle_lock(TRUNK_LOCK)
+
+    async def async_unlock(self, **kwargs):
+        await self.toggle_lock(TRUNK_UNLOCK)

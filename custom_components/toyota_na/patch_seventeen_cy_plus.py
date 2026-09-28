@@ -1,5 +1,6 @@
 import datetime
 import logging
+import time
 
 from toyota_na.client import ToyotaOneClient
 from toyota_na.vehicle.base_vehicle import (
@@ -37,6 +38,11 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         # Confirmed on a Solterra. There is no off: headlight-off is rejected,
         # so the vehicle ends it itself, the same as hazards.
         RemoteRequestCommand.Headlights: "headlight-on",
+        # Confirmed on a Solterra, where they lock and unlock the hatch. From
+        # Toyota Europe's vocabulary, as is ac-settings-on, which this gateway
+        # rejects with HTTP 400.
+        RemoteRequestCommand.TrunkLock: "trunk-lock",
+        RemoteRequestCommand.TrunkUnlock: "trunk-unlock",
     }
 
     #  We'll parse these keys out in the parser by mapping the category and section types to a string literal
@@ -104,6 +110,15 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
 
     _last_graphql_status = None  # persist last successful GraphQL status
 
+    HEALTH_REPORT_INTERVAL_SECONDS = 6 * 3600
+    """How often to fetch the vehicle health report.
+
+    The servers generate the report on request rather than serving a cached
+    one, and what it carries - recalls and service campaigns - changes on the
+    scale of weeks. So it is fetched at setup and then every six hours, not on
+    every refresh.
+    """
+
     async def update(self):
 
         try:
@@ -158,6 +173,71 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         except Exception as e:
             _LOGGER.debug("Error parsing electric status: %s", e)
             pass
+
+        if self._has_remote_subscription:
+            await self._update_health_report()
+
+    async def _update_health_report(self) -> None:
+        """Recall and service campaign counts, from a report fetched rarely.
+
+        A failed fetch is remembered like a successful one, so a gateway that
+        refuses the report (it may, for some brands or generations) is asked
+        again only at the next interval. With no report, the features stay
+        absent and no entities are created for them.
+        """
+        reports = getattr(self._client, "health_reports", None)
+        if reports is None:
+            return
+        cached = reports.get(self._vin)
+        if cached is None or (
+            time.time() - cached["fetched_at"] >= self.HEALTH_REPORT_INTERVAL_SECONDS
+        ):
+            cached = {"fetched_at": time.time()}
+            for name, fetch in (
+                ("report", self._client.get_vehicle_health_report),
+                ("status", self._client.get_vehicle_health_status),
+            ):
+                try:
+                    cached[name] = await fetch(self._vin)
+                except Exception as e:
+                    _LOGGER.debug(
+                        "Health %s unavailable for VIN ...%s: %s",
+                        name, self._vin[-4:], e,
+                    )
+                    cached[name] = None
+            reports[self._vin] = cached
+        if isinstance(cached.get("report"), dict):
+            self._parse_health_report(cached["report"])
+        if isinstance(cached.get("status"), dict):
+            self._parse_health_status(cached["status"])
+
+    def _parse_health_report(self, report: dict) -> None:
+        # Counted from the lists. recallsListExists reads true with the list
+        # empty, so it does not mean there is a recall.
+        recalls = report.get("safetyRecallsList") or []
+        # Two campaign lists, both empty on every report seen so far, so which
+        # one the app shows is unknown. Use whichever has entries.
+        campaigns = report.get("serviceCampaignList") or report.get("serviceCampaigns") or []
+        for feature, entries in (
+            (VehicleFeatures.OpenRecalls, recalls),
+            (VehicleFeatures.ServiceCampaigns, campaigns),
+        ):
+            if not isinstance(entries, list):
+                continue
+            self._features[feature] = ToyotaNumeric(len(entries), "")
+            self.health_details[feature] = entries
+
+    def _parse_health_status(self, status: dict) -> None:
+        # The report carries the same code as smartKeyBatteryDegStatus, but no
+        # date; this one says when the vehicle last reported it, which can be
+        # weeks ago and which the app never shows.
+        code = status.get("smartKeyBatStatus")
+        if code in (None, ""):
+            return
+        self._features[VehicleFeatures.KeyFobBattery] = ToyotaNumeric(code, "")
+        self.health_details[VehicleFeatures.KeyFobBattery] = {
+            "last_reported": status.get("smartKeyBatLastUpdTime"),
+        }
 
     async def poll_vehicle_refresh(self) -> bool:
         """Ask the vehicle to upload fresh status. Returns whether that was accepted.

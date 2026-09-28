@@ -12,7 +12,35 @@ be different code without colliding. For history before the fork, see
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Hatch** lock, for vehicles whose listing says they take the command. It
+  locks and unlocks the hatch on its own. The **Doors** lock no longer counts the
+  hatch on those vehicles, so an unlocked hatch stops showing the doors as
+  unlocked.
+- **Open recalls** and **Service campaigns** sensors: a count of each, with the
+  entries as an attribute. They come from the vehicle health report, fetched at
+  startup and every six hours; where the report isn't served, the sensors
+  aren't created.
+- **Key fob battery**, as the app's *Health* tab shows it, with a
+  `last_reported` attribute for when the vehicle last reported it, which the app
+  doesn't show and can be weeks ago. Only *Good* is known so far; any other
+  reading shows as its code.
+
+### Changed
+
+- The **Trunk** and **Trunk lock** binary sensors are named **Hatch** and
+  **Hatch lock**, as the vehicle and the app call it. Only the names change:
+  existing entity IDs, history and automations are kept.
+
+### Fixed
+
+- **Diagnostics no longer include the VIN.** Poll times are stored keyed by VIN
+  since `.17`, and Home Assistant's redaction hides values, not keys. They now
+  show as `...1234`. The account ID, telematics SIM and serial number, contract
+  ID, licence plate (if ever given to Toyota/Subaru) and vehicle nickname are
+  redacted too. Nothing was sent anywhere: a diagnostics file is only created
+  when you download one, and it stays on your computer unless you share it.
 
 ## [2.7.0-subaru.18] - 2026-09-19
 

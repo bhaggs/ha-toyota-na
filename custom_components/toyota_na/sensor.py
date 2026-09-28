@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import logging
+import re
 from typing import Any, Union, cast
 
 from toyota_na.vehicle.base_vehicle import ToyotaVehicle, VehicleFeatures
@@ -74,6 +75,19 @@ async def async_setup_entry(
                     )
                     continue
 
+                if entity_config.get("details"):
+                    sensors.append(
+                        ToyotaDetailsSensor(
+                            cast(VehicleFeatures, entity_config["feature"]),
+                            cast(str, entity_config["icon"]),
+                            coordinator,
+                            entity_config["key"],
+                            entity_config["name"],
+                            vehicle.vin,
+                        )
+                    )
+                    continue
+
                 # "is not None", not truthiness: a table with nothing mapped
                 # yet is an empty dict, which is falsy.
                 if entity_config.get("decode") is not None:
@@ -86,6 +100,7 @@ async def async_setup_entry(
                             entity_config["key"],
                             entity_config["name"],
                             vehicle.vin,
+                            issue=entity_config.get("issue", 3),
                         )
                     )
                     continue
@@ -210,11 +225,20 @@ class ToyotaCodeSensor(ToyotaNABaseEntity):
     code is visible in the UI rather than only in the log.
     """
 
-    def __init__(self, vehicle_feature: VehicleFeatures, icon: str, table: dict, *args: Any):
+    def __init__(
+        self,
+        vehicle_feature: VehicleFeatures,
+        icon: str,
+        table: dict,
+        *args: Any,
+        issue: int = 3,
+    ):
         super().__init__(*args)
         self._icon = icon
         self._table = table
         self._vehicle_feature = vehicle_feature
+        # Where an unrecognised code is asked to be reported.
+        self._issue = issue
 
     @property
     def icon(self) -> str:
@@ -229,12 +253,69 @@ class ToyotaCodeSensor(ToyotaNABaseEntity):
     def state(self):
         # Names the entity in the unrecognised-code log, so the report points at
         # something the user can actually see.
-        return ev_codes.decode(self._raw, self._table, self._attr_name or "code")
+        return ev_codes.decode(
+            self._raw, self._table, self._attr_name or "code", self._issue
+        )
 
     @property
     def extra_state_attributes(self):
         raw = self._raw
-        return None if raw is None else {"code": raw}
+        if raw is None:
+            return None
+        attributes = {"code": raw}
+        vehicle = self.vehicle
+        details = getattr(vehicle, "health_details", {}) if vehicle else {}
+        extra = details.get(self._vehicle_feature)
+        if isinstance(extra, dict):
+            reported = extra.get("last_reported")
+            if reported:
+                # The gateway sends seven fractional digits, which not every
+                # parser accepts; trim to microseconds first.
+                parsed = dt_util.parse_datetime(
+                    re.sub(r"(\.\d{6})\d+", r"\1", str(reported))
+                )
+                attributes["last_reported"] = (
+                    parsed.isoformat() if parsed else reported
+                )
+        return attributes
+
+
+def _without_vin(value):
+    """Drop any "vin" key, at any depth, from entries shown as attributes."""
+    if isinstance(value, dict):
+        return {k: _without_vin(v) for k, v in value.items() if k.lower() != "vin"}
+    if isinstance(value, list):
+        return [_without_vin(v) for v in value]
+    return value
+
+
+class ToyotaDetailsSensor(ToyotaNABaseEntity):
+    """A count of entries, such as open recalls, with the entries as an attribute.
+
+    The entries are passed through as the gateway sends them, minus any VIN:
+    every report seen so far had none, so their fields are not known yet.
+    """
+
+    def __init__(self, vehicle_feature: VehicleFeatures, icon: str, *args: Any):
+        super().__init__(*args)
+        self._icon = icon
+        self._vehicle_feature = vehicle_feature
+
+    @property
+    def icon(self) -> str:
+        return self._icon
+
+    @property
+    def state(self):
+        feat = cast(ToyotaNumeric, self.feature(self._vehicle_feature))
+        return feat.value if feat is not None else None
+
+    @property
+    def extra_state_attributes(self):
+        vehicle = self.vehicle
+        details = getattr(vehicle, "health_details", {}) if vehicle else {}
+        entries = details.get(self._vehicle_feature)
+        return None if entries is None else {"entries": _without_vin(entries)}
 
 
 class ToyotaNumericSensor(ToyotaNABaseEntity):

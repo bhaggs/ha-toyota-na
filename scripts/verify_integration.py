@@ -178,7 +178,10 @@ class FakeVehicle:
         self.model_year = "2024"
         self.electric = True
         self.generation = ApiVehicleGeneration.MM24
+        self.capabilities = {"trunkLockUnlockCapable": True}
+        self.health_details = {}
         self.polled = 0
+        self.sent = []
         self.features = _all_features(
             report_time if report_time is not None else time.time() - 7200
         )
@@ -194,7 +197,7 @@ class FakeVehicle:
         return True
 
     async def send_command(self, command):
-        pass
+        self.sent.append(command)
 
 
 def fake_entry(entry_id="e1", data=None, options=None, disable_polling=False):
@@ -996,6 +999,222 @@ async def s10_refused_polls():
     check("pressing Poll vehicle reports the refusal", message is not None and "rate-limiting" in message, str(message))
 
 
+async def s11_hatch_lock_and_recalls():
+    from toyota_na.vehicle.entity_types.ToyotaLockableOpening import (
+        ToyotaLockableOpening,
+    )
+    from toyota_na.vehicle.entity_types.ToyotaNumeric import ToyotaNumeric
+
+    from custom_components.toyota_na import lock, sensor
+    from custom_components.toyota_na.patch_base_vehicle import RemoteRequestCommand
+    from custom_components.toyota_na.patch_seventeen_cy_plus import (
+        SeventeenCYPlusToyotaVehicle,
+    )
+
+    print("   -- hatch lock --")
+    hass = new_hass()
+    capable = FakeVehicle("JF2ZCACC1R8000001")
+    plain = FakeVehicle("JF2ZCACC1R8000002")
+    plain.capabilities = {}
+    legacy = FakeVehicle("JF2ZCACC1R8000003")
+    legacy.generation = ApiVehicleGeneration.CY17
+    vehicles = [capable, plain, legacy]
+    for v in vehicles:
+        # Doors locked, hatch unlocked: the case where counting the hatch in
+        # the doors would misreport them.
+        v.features[VehicleFeatures.Trunk] = ToyotaLockableOpening(closed=True, locked=False)
+    entry = fake_entry()
+    coordinator = make_coordinator(hass, entry, vehicles)
+    hass.data[DOMAIN] = {"e1": {"coordinator": coordinator}}
+
+    locks = []
+    await lock.async_setup_entry(hass, entry, lambda e, *a, **k: locks.extend(e))
+    by_id = {x.unique_id: x for x in locks}
+    for x in locks:
+        x.hass = hass
+        x.async_write_ha_state = lambda: None
+    hatch = by_id.get("JF2ZCACC1R8000001-trunk_lock")
+    check("hatch lock created for a capable vehicle", hatch is not None, str(sorted(by_id)))
+    check("named Hatch", hatch is not None and hatch._attr_name == "Hatch")
+    check("no hatch lock without the capability", "JF2ZCACC1R8000002-trunk_lock" not in by_id)
+    check("no hatch lock on legacy 17CY", "JF2ZCACC1R8000003-trunk_lock" not in by_id)
+    check("hatch reads unlocked", hatch is not None and hatch.is_locked is False)
+    check("doors ignore the hatch once it has its own lock",
+          by_id["JF2ZCACC1R8000001-door_lock"].is_locked is True)
+    check("doors still count it where it has no lock of its own",
+          by_id["JF2ZCACC1R8000002-door_lock"].is_locked is False)
+
+    async def no_refresh(*_a, **_k):
+        pass
+
+    if hatch is not None:
+        hatch._background_refresh = no_refresh
+        await hatch.async_lock()
+        await hatch.async_unlock()
+    check("sends trunk-lock then trunk-unlock",
+          capable.sent == [RemoteRequestCommand.TrunkLock, RemoteRequestCommand.TrunkUnlock],
+          str(capable.sent))
+    check("the vehicle takes both commands",
+          SeventeenCYPlusToyotaVehicle._command_map[RemoteRequestCommand.TrunkLock] == "trunk-lock"
+          and SeventeenCYPlusToyotaVehicle._command_map[RemoteRequestCommand.TrunkUnlock] == "trunk-unlock")
+
+    print("   -- recall sensors --")
+    recall = {"campaignId": "26V-001", "title": "Example", "vin": "JF2ZCACC1R8000001"}
+    capable.features[VehicleFeatures.OpenRecalls] = ToyotaNumeric(1, "")
+    capable.health_details = {VehicleFeatures.OpenRecalls: [recall]}
+    capable.features[VehicleFeatures.ServiceCampaigns] = ToyotaNumeric(0, "")
+    capable.health_details[VehicleFeatures.ServiceCampaigns] = []
+    del plain.features[VehicleFeatures.OpenRecalls]
+    del plain.features[VehicleFeatures.ServiceCampaigns]
+    sensors = []
+    await sensor.async_setup_entry(hass, entry, lambda e, *a, **k: sensors.extend(e))
+    s_by_id = {x.unique_id: x for x in sensors}
+    recalls = s_by_id.get("JF2ZCACC1R8000001-open_recalls")
+    check("Open recalls sensor created", isinstance(recalls, sensor.ToyotaDetailsSensor))
+    check("counts the entries", recalls is not None and recalls.state == 1)
+    attrs = recalls.extra_state_attributes if recalls else None
+    check("entries shown without the VIN",
+          attrs == {"entries": [{"campaignId": "26V-001", "title": "Example"}]}, str(attrs))
+    campaigns = s_by_id.get("JF2ZCACC1R8000001-service_campaigns")
+    check("Service campaigns reads 0", campaigns is not None and campaigns.state == 0)
+    check("no recall sensors where the report was not served",
+          "JF2ZCACC1R8000002-open_recalls" not in s_by_id
+          and "JF2ZCACC1R8000002-service_campaigns" not in s_by_id)
+
+    print("   -- health report schedule --")
+
+    class Client:
+        def __init__(self, report=None, status=None, fail=False):
+            self.health_reports = {}
+            self.calls = 0
+            self.report = report
+            self.status = status
+            self.fail = fail
+
+        async def get_vehicle_health_report(self, _vin):
+            self.calls += 1
+            if self.fail:
+                raise RuntimeError("403")
+            return self.report
+
+        async def get_vehicle_health_status(self, _vin):
+            if self.fail:
+                raise RuntimeError("403")
+            return self.status
+
+    def fresh(client):
+        # Every refresh builds new vehicle objects, which is the case to cover.
+        return SeventeenCYPlusToyotaVehicle(
+            client, True, True, "Solterra", "2026", "JF2ZCACC1R8000001", "US"
+        )
+
+    report = {
+        "recallsListExists": True,
+        "safetyRecallsList": [],
+        "serviceCampaignList": [],
+        "serviceCampaigns": [{"id": 1}],
+    }
+    status = {
+        "smartKeyBatStatus": "3",
+        "smartKeyBatDesc": "",
+        "smartKeyBatLastUpdTime": "2026-08-06T16:38:50.0000000Z",
+        "vin": "JF2ZCACC1R8000001",
+    }
+    client = Client(report, status)
+    first = fresh(client)
+    await first._update_health_report()
+    check("fetched on the first refresh", client.calls == 1)
+    check("recalls counted from the list, not recallsListExists",
+          first.features[VehicleFeatures.OpenRecalls].value == 0)
+    check("campaigns from whichever list has entries",
+          first.features[VehicleFeatures.ServiceCampaigns].value == 1)
+    second = fresh(client)
+    await second._update_health_report()
+    check("not fetched again within the interval", client.calls == 1)
+    check("a new vehicle object still gets the counts",
+          second.features.get(VehicleFeatures.OpenRecalls) is not None)
+    client.health_reports["JF2ZCACC1R8000001"]["fetched_at"] -= (
+        SeventeenCYPlusToyotaVehicle.HEALTH_REPORT_INTERVAL_SECONDS
+    )
+    await fresh(client)._update_health_report()
+    check("fetched again once due", client.calls == 2)
+
+    check("key fob code read from the health status",
+          first.features[VehicleFeatures.KeyFobBattery].value == "3")
+
+    print("   -- key fob sensor --")
+    kf_hass = new_hass()
+    kf = FakeVehicle("JF2ZCACC1R8000001")
+    kf.features[VehicleFeatures.KeyFobBattery] = first.features[VehicleFeatures.KeyFobBattery]
+    kf.health_details = dict(first.health_details)
+    odd = FakeVehicle("JF2ZCACC1R8000002")
+    odd.features[VehicleFeatures.KeyFobBattery] = ToyotaNumeric("7", "")
+    kf_entry = fake_entry()
+    kf_coordinator = make_coordinator(kf_hass, kf_entry, [kf, odd])
+    kf_hass.data[DOMAIN] = {"e1": {"coordinator": kf_coordinator}}
+    kf_sensors = []
+    await sensor.async_setup_entry(kf_hass, kf_entry, lambda e, *a, **k: kf_sensors.extend(e))
+    kf_by_id = {x.unique_id: x for x in kf_sensors}
+    fob = kf_by_id.get("JF2ZCACC1R8000001-key_fob_battery")
+    check("Key fob battery sensor created", isinstance(fob, sensor.ToyotaCodeSensor))
+    check("3 reads Good", fob is not None and fob.state == "Good", str(fob and fob.state))
+    fob_attrs = fob.extra_state_attributes if fob else None
+    check("attributes carry the code and a parsed last_reported",
+          fob_attrs == {"code": "3", "last_reported": "2026-08-06T16:38:50+00:00"},
+          str(fob_attrs))
+    unknown = kf_by_id.get("JF2ZCACC1R8000002-key_fob_battery")
+    import logging as _logging
+    records = []
+
+    class _Grab(_logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    grab = _Grab()
+    _logging.getLogger("custom_components.toyota_na.ev_codes").addHandler(grab)
+    try:
+        state = unknown.state if unknown else None
+    finally:
+        _logging.getLogger("custom_components.toyota_na.ev_codes").removeHandler(grab)
+    check("an unknown code shows as itself", state == "7", str(state))
+    check("...and asks for it on #20", any("issues/20" in m for m in records), str(records))
+
+    refused = Client(fail=True)
+    v = fresh(refused)
+    await v._update_health_report()
+    await fresh(refused)._update_health_report()
+    check("a refused report leaves the features absent",
+          VehicleFeatures.OpenRecalls not in v.features)
+    check("...and is not retried on every refresh", refused.calls == 1)
+
+    print("   -- vehicle listing wiring --")
+    from custom_components.toyota_na import patch_vehicle
+
+    class ListingClient:
+        health_reports = {}
+
+        async def get_user_vehicle_list(self):
+            return [{
+                "generation": "21MM",
+                "remoteSubscriptionStatus": "ACTIVE",
+                "evVehicle": True,
+                "modelName": "Solterra",
+                "modelYear": "2026",
+                "vin": "JF2ZCACC1R8000001",
+                "region": "US",
+                "extendedCapabilities": {"trunkLockUnlockCapable": True},
+            }]
+
+        def __getattr__(self, _name):
+            async def nothing(*_a, **_k):
+                return None
+            return nothing
+
+    listed = await patch_vehicle.get_vehicles(ListingClient())
+    check("listing carries capabilities to the vehicle",
+          listed and listed[0].capabilities.get("trunkLockUnlockCapable") is True)
+
+
 SECTIONS = [
     ("1. async_setup, services, options flow", s1_setup_and_services),
     ("2. interval options matrix", s2_interval_matrix),
@@ -1007,6 +1226,7 @@ SECTIONS = [
     ("8. cause routing for Activity details", s8_cause_routing),
     ("9. Activity details end to end, through the recorder and logbook", s9_logbook_end_to_end),
     ("10. refused polls are not counted", s10_refused_polls),
+    ("11. hatch lock, recall and key fob sensors", s11_hatch_lock_and_recalls),
 ]
 
 

@@ -72,6 +72,17 @@ raw value is exposed as an attribute, unknown values are reported, and mapping
 one later is a line in this dict rather than a change in shape.
 """
 
+KEY_FOB_BATTERY = {
+    3: "Good",
+}
+"""Key fob battery, smartKeyBatStatus in the vehicle health status.
+
+3 read on a 2026 Solterra whose SubaruConnect app showed Good. One sample, so
+the other values are unknown; the report's smartKeyBatteryDegStatus reads the
+same code with an empty description, so the app must translate it itself.
+bhaggs/ha-toyota-na#20 collects the rest.
+"""
+
 UNAVAILABLE_UINT16 = 65535
 """0xFFFF, the "not applicable" sentinel for 16-bit fields.
 
@@ -95,7 +106,7 @@ def numeric(value):
     return value
 
 
-def decode(value, table, field="code"):
+def decode(value, table, field="code", issue=3):
     """Look up a code, tolerating the string digits the API sometimes returns.
 
     Unknown codes come back untouched, so a new value shows up in the UI as
@@ -120,10 +131,11 @@ def decode(value, table, field="code"):
         _REPORTED_UNKNOWN.add(marker)
         _LOGGER.info(
             "Unrecognised %s value %r from the vehicle. %s "
-            "Please report it at https://github.com/bhaggs/ha-toyota-na/issues/3",
+            "Please report it at https://github.com/bhaggs/ha-toyota-na/issues/%s",
             field,
             value,
             f"Known values are {sorted(table)}." if table else "No values are mapped yet.",
+            issue,
         )
     return value
 

@@ -64,6 +64,11 @@ class OneClient:
 
     def __init__(self, auth=None, brand=DEFAULT_BRAND):
         self.auth = auth or OneAuth(brand=brand)
+        # VIN -> (fetched_at, report or None). Held here rather than on the
+        # vehicle because every refresh builds new vehicle objects, and the
+        # report is fetched far less often than that. See
+        # SeventeenCYPlusToyotaVehicle._update_health_report.
+        self.health_reports: dict = {}
 
     @property
     def brand(self):

@@ -31,6 +31,8 @@ POLL_VEHICLE = "poll_vehicle"
 BUZZER = "buzzer"
 SOUND_HORN = "sound_horn"
 HEADLIGHTS = "headlights"
+TRUNK_LOCK = "trunk_lock"
+TRUNK_UNLOCK = "trunk_unlock"
 
 # Two very different costs, so they are configured separately.
 #
@@ -74,11 +76,13 @@ COMMAND_MAP = {
     BUZZER: RemoteRequestCommand.BuzzerWarning,
     SOUND_HORN: RemoteRequestCommand.SoundHorn,
     HEADLIGHTS: RemoteRequestCommand.Headlights,
+    TRUNK_LOCK: RemoteRequestCommand.TrunkLock,
+    TRUNK_UNLOCK: RemoteRequestCommand.TrunkUnlock,
 }
 
 # Commands the legacy 17CY protocol has no equivalent for. Buttons for these are
 # not created on those vehicles, since send_command would raise on press.
-CY17PLUS_ONLY_ACTIONS = {BUZZER, SOUND_HORN, HEADLIGHTS}
+CY17PLUS_ONLY_ACTIONS = {BUZZER, SOUND_HORN, HEADLIGHTS, TRUNK_LOCK, TRUNK_UNLOCK}
 
 SEND_COMMAND = "send_command"
 
@@ -197,8 +201,10 @@ BINARY_SENSORS = [
         "device_class": BinarySensorDeviceClass.DOOR,
         "feature": VehicleFeatures.Trunk,
         "icon": "mdi:car-door",
+        # Keyed "trunk", as the gateway calls it; named for the hatch every
+        # supported vehicle has. Renamed from "Trunk" in 2.7.0-subaru.19.
         "key": "trunk",
-        "name": "Trunk",
+        "name": "Hatch",
         "subscription": True,
         "electric": False,
     },
@@ -288,7 +294,7 @@ BINARY_SENSORS = [
         "feature": VehicleFeatures.Trunk,
         "icon": "mdi:car-door-lock",
         "key": "trunk_lock",
-        "name": "Trunk lock",
+        "name": "Hatch lock",
         "subscription": True,
         "electric": False,
     },
@@ -551,5 +557,40 @@ SENSORS = [
         "unit": "",
         "subscription": True,
         "electric": True,
+    },
+    {
+        # A count, with the entries as an attribute. From the vehicle health
+        # report, fetched every few hours; absent, and so not created, where
+        # the gateway does not serve the report. See ToyotaDetailsSensor.
+        "details": True,
+        "icon": "mdi:alert-decagram-outline",
+        "feature": VehicleFeatures.OpenRecalls,
+        "key": "open_recalls",
+        "name": "Open recalls",
+        "subscription": True,
+        "electric": False,
+    },
+    {
+        # Decoded like the charging codes, with the date the vehicle last
+        # reported it as an attribute. Fetched with the health report.
+        "state_class": None,
+        "decode": ev_codes.KEY_FOB_BATTERY,
+        "issue": 20,
+        "icon": "mdi:key-wireless",
+        "feature": VehicleFeatures.KeyFobBattery,
+        "key": "key_fob_battery",
+        "name": "Key fob battery",
+        "unit": "",
+        "subscription": True,
+        "electric": False,
+    },
+    {
+        "details": True,
+        "icon": "mdi:wrench-clock-outline",
+        "feature": VehicleFeatures.ServiceCampaigns,
+        "key": "service_campaigns",
+        "name": "Service campaigns",
+        "subscription": True,
+        "electric": False,
     },
 ]

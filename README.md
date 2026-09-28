@@ -35,7 +35,8 @@ Most of this requires an active Remote Services subscription.
 **Vehicle state** — doors, windows, moonroof, hood, and trunk open/closed; door
 and trunk lock state; current and last-parked location; odometer, speed, trip A
 and B, fuel level, distance to empty; tire pressures including spare; next
-service; last-update timestamps.
+service; open recalls and service campaigns; key fob battery; last-update
+timestamps.
 
 **EV** — battery level, range with and without climate, travelable distance,
 charging state, connector state, plug state, charge type, and charge time both as
@@ -46,6 +47,7 @@ minutes remaining and as the moment charging finishes.
 | Control | What it does |
 |---|---|
 | Doors | Lock and unlock. |
+| Hatch | Locks and unlocks the hatch on its own. Only offered where the vehicle takes the command. |
 | Remote start | Climate preconditioning, despite the name — the command the backend takes is `engine-start`. A switch rather than buttons, because the vehicle reports whether it is running and for how much longer. |
 | Hazards | Flashes the hazard lights. Momentary: the vehicle stops them after about a minute on its own. |
 | Buzzer | A short digital beep from the vehicle's external speaker, for locating it in a parking lot. |
@@ -114,9 +116,9 @@ report it on [#3](https://github.com/bhaggs/ha-toyota-na/issues/3).
 
 - **`Charging type`** always reads 15, even while DC fast charging. See
   [Charging sensor values](#charging-sensor-values).
-- **Key fob battery** appears in the app but not here. It was
-  advertised in the upstream README for years and never implemented; the data may
-  live in the unused `v1/vehiclehealth/*` endpoints.
+- **Key fob battery** only knows *Good* so far, and the vehicle reports it
+  rarely: check `last_reported`. If your app shows anything else, please add it
+  to [#20](https://github.com/bhaggs/ha-toyota-na/issues/20).
 
 ## Polling and the 12V battery
 

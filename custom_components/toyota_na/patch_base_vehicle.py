@@ -61,6 +61,13 @@ class VehicleFeatures(Enum):
     ChargeType = auto()
     ConnectorStatus = auto()
 
+    # Counts from the vehicle health report, fetched rarely. The entries
+    # themselves are on ToyotaVehicle.health_details.
+    OpenRecalls = auto()
+    ServiceCampaigns = auto()
+    # From the vehicle health status, fetched with the report.
+    KeyFobBattery = auto()
+
     #Times
     OccurrenceDate = auto()
 
@@ -86,6 +93,8 @@ class RemoteRequestCommand(Enum):
     BuzzerWarning = auto()
     SoundHorn = auto()
     Headlights = auto()
+    TrunkLock = auto()
+    TrunkUnlock = auto()
 
 
 class ToyotaVehicle(ABC):
@@ -136,6 +145,12 @@ class ToyotaVehicle(ABC):
         self._model_year = model_year
         self._vin = vin
         self._region = region
+        # From the vehicle list's extendedCapabilities, set by get_vehicles
+        # after construction: which remote commands the vehicle takes.
+        self.capabilities: dict = {}
+        # Entries behind the health report counts, keyed by the feature they
+        # are counted in. Kept apart from features, which hold one reading each.
+        self.health_details: dict = {}
 
     @abstractmethod
     async def poll_vehicle_refresh(self) -> bool:

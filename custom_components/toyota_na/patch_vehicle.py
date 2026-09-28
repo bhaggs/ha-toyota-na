@@ -12,6 +12,7 @@ async def get_vehicles(client: ToyotaOneClient) -> list[ToyotaVehicle]:
     vehicles = []
 
     for (i, vehicle) in enumerate(api_vehicles):
+        listing = vehicle
         if vehicle["generation"] not in supportedGenerations:
             continue
         if (
@@ -39,6 +40,8 @@ async def get_vehicles(client: ToyotaOneClient) -> list[ToyotaVehicle]:
                 vin=vehicle["vin"],
                 region=vehicle["region"],
             )
+
+        vehicle.capabilities = listing.get("extendedCapabilities") or {}
 
         vehicle_update = vehicle.update()
         if vehicle_update:
