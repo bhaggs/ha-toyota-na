@@ -18,6 +18,10 @@ Nothing yet.
 
 ### Added
 
+- **Charging last updated**, when the vehicle took its battery and charging
+  readings. They come from a different record from **Last updated**, which is
+  why a finished charge can move the battery level without moving Last updated.
+
 - **Hatch** lock, for vehicles whose listing says they take the command. It
   locks and unlocks the hatch on its own. The **Doors** lock no longer counts the
   hatch on those vehicles, so an unlocked hatch stops showing the doors as

@@ -40,7 +40,8 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         RemoteRequestCommand.Headlights: "headlight-on",
         # Confirmed on a Solterra, where they lock and unlock the hatch. From
         # Toyota Europe's vocabulary, as is ac-settings-on, which this gateway
-        # rejects with HTTP 400.
+        # rejects with HTTP 400. find-vehicle is accepted but only flashes the
+        # hazards, the same as hazard-on, so it gets no entry of its own.
         RemoteRequestCommand.TrunkLock: "trunk-lock",
         RemoteRequestCommand.TrunkUnlock: "trunk-unlock",
     }
@@ -323,6 +324,16 @@ class SeventeenCYPlusToyotaVehicle(ToyotaVehicle):
         if not electric_status or "vehicleInfo" not in electric_status:
             return
         
+        acquired = electric_status["vehicleInfo"].get("acquisitionDatetime")
+        if acquired:
+            try:
+                taken = datetime.datetime.fromisoformat(acquired.replace("Z", "+00:00"))
+                self._features[VehicleFeatures.ChargingLastUpdated] = ToyotaNumeric(
+                    taken.timestamp(), ""
+                )
+            except ValueError:
+                _LOGGER.debug("Unparseable electric status time %r", acquired)
+
         chargeInfo = electric_status["vehicleInfo"].get("chargeInfo", {})
         if not chargeInfo:
             return

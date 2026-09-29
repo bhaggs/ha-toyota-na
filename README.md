@@ -251,14 +251,14 @@ independent records that refresh at different moments:
 | What you see | Comes from | Moves when |
 |---|---|---|
 | **Last updated**, odometer, range, location, tire pressures | telemetry | the vehicle uploads new telemetry |
-| Battery level, charging plug and connector, charging time | electric status | the vehicle reports a charging change |
+| **Charging last updated**, battery level, charging plug and connector, charging time | electric status | the vehicle reports a charging change |
 | Doors, locks, windows, hood, hatch | remote status | the vehicle reports an opening change |
 
 So a charge finishing can move the battery level while **Last updated** stays
 where it was — the charge updated the electric record, not telemetry. Nothing is
-out of sync; those are simply different records. The connected-services platform
-exposes no timestamp of its own for the electric record, so there is nothing the
-integration can show for "when the charging data was measured".
+out of sync; those are simply different records. **Charging last updated** is
+the electric record's own time, so it shows when the battery and charging
+readings were taken.
 
 The same explains a poll that appears to update only some values. **Poll
 vehicle** asks the vehicle to upload, which moves telemetry and so **Last

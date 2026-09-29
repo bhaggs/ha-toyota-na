@@ -461,6 +461,18 @@ SENSORS = [
         "electric": False,
     },
     {
+        # The electric status record's own time, which moves independently of
+        # Last updated (the telemetry record's). A charge finishing moves this
+        # and not that.
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:battery-clock-outline",
+        "feature": VehicleFeatures.ChargingLastUpdated,
+        "key": "charging_last_updated",
+        "name": "Charging last updated",
+        "subscription": False,
+        "electric": True,
+    },
+    {
         "device_class": SensorDeviceClass.TIMESTAMP,
         "icon": "mdi:clock-outline",
         "feature": VehicleFeatures.LastTirePressureTimeStamp,

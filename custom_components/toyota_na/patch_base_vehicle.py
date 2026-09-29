@@ -53,6 +53,9 @@ class VehicleFeatures(Enum):
     TripDetailsB = auto()
     NextService = auto()
     LastTimeStamp = auto()
+    # When the vehicle took the electric status reading. Independent of
+    # LastTimeStamp, which is the telemetry record's.
+    ChargingLastUpdated = auto()
     LastTirePressureTimeStamp = auto()
     Speed = auto()
     PlugStatus = auto()

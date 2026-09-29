@@ -1187,6 +1187,27 @@ async def s11_hatch_lock_and_recalls():
           VehicleFeatures.OpenRecalls not in v.features)
     check("...and is not retried on every refresh", refused.calls == 1)
 
+    print("   -- charging data updated --")
+    ev = fresh(Client())
+    ev._has_electric = True
+    ev._parse_electric_status({
+        "vehicleInfo": {
+            "acquisitionDatetime": "2026-09-23T19:28:02Z",
+            "chargeInfo": {"plugStatus": 12, "chargeRemainingAmount": 80},
+        }
+    })
+    taken = ev.features.get(VehicleFeatures.ChargingLastUpdated)
+    check("electric status time parsed as an epoch",
+          taken is not None and taken.value == 1790191682.0, str(taken and taken.value))
+    ev2 = fresh(Client())
+    ev2._parse_electric_status({"vehicleInfo": {"chargeInfo": {"plugStatus": 12}}})
+    check("absent when the reading has no time",
+          VehicleFeatures.ChargingLastUpdated not in ev2.features)
+    check("Charging last updated is a timestamp sensor",
+          any(r["feature"] == VehicleFeatures.ChargingLastUpdated
+              and r["key"] == "charging_last_updated" for r in __import__(
+                  "custom_components.toyota_na.const", fromlist=["x"]).SENSORS))
+
     print("   -- vehicle listing wiring --")
     from custom_components.toyota_na import patch_vehicle
 
@@ -1226,7 +1247,7 @@ SECTIONS = [
     ("8. cause routing for Activity details", s8_cause_routing),
     ("9. Activity details end to end, through the recorder and logbook", s9_logbook_end_to_end),
     ("10. refused polls are not counted", s10_refused_polls),
-    ("11. hatch lock, recall and key fob sensors", s11_hatch_lock_and_recalls),
+    ("11. hatch lock, recall, key fob and charging-time sensors", s11_hatch_lock_and_recalls),
 ]
 
 
