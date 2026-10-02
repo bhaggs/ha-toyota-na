@@ -14,7 +14,7 @@ be different code without colliding. For history before the fork, see
 
 Nothing yet.
 
-## [2.7.0-subaru.19] - 2026-09-28
+## [2.7.0-subaru.19] - 2026-10-01
 
 ### Added
 
@@ -39,6 +39,9 @@ Nothing yet.
 - The **Trunk** and **Trunk lock** binary sensors are named **Hatch** and
   **Hatch lock**, as the vehicle and the app call it. Only the names change:
   existing entity IDs, history and automations are kept.
+- **Open recalls**, **Service campaigns** and **Key fob battery** are diagnostic
+  entities, like **Next service**: they appear in the device page's
+  *Diagnostic* card and stay out of auto-generated dashboards.
 
 ### Fixed
 
@@ -48,6 +51,11 @@ Nothing yet.
   ID, licence plate (if ever given to Toyota/Subaru) and vehicle nickname are
   redacted too. Nothing was sent anywhere: a diagnostics file is only created
   when you download one, and it stays on your computer unless you share it.
+- Locking a vehicle that is already locked no longer shows **Unlocking** before
+  settling on **Locked**. The lock worked out the direction from the current
+  state rather than from the command sent. A command for the state the vehicle
+  is already in is still sent, so a nightly "lock everything" routine still
+  works, but it shows no transition.
 
 ## [2.7.0-subaru.18] - 2026-09-19
 
