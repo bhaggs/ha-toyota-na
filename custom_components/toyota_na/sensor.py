@@ -76,33 +76,37 @@ async def async_setup_entry(
                     continue
 
                 if entity_config.get("details"):
-                    sensors.append(
-                        ToyotaDetailsSensor(
-                            cast(VehicleFeatures, entity_config["feature"]),
-                            cast(str, entity_config["icon"]),
-                            coordinator,
-                            entity_config["key"],
-                            entity_config["name"],
-                            vehicle.vin,
-                        )
+                    details_sensor = ToyotaDetailsSensor(
+                        cast(VehicleFeatures, entity_config["feature"]),
+                        cast(str, entity_config["icon"]),
+                        coordinator,
+                        entity_config["key"],
+                        entity_config["name"],
+                        vehicle.vin,
                     )
+                    details_sensor._attr_entity_category = entity_config.get(
+                        "entity_category"
+                    )
+                    sensors.append(details_sensor)
                     continue
 
                 # "is not None", not truthiness: a table with nothing mapped
                 # yet is an empty dict, which is falsy.
                 if entity_config.get("decode") is not None:
-                    sensors.append(
-                        ToyotaCodeSensor(
-                            cast(VehicleFeatures, entity_config["feature"]),
-                            cast(str, entity_config["icon"]),
-                            entity_config["decode"],
-                            coordinator,
-                            entity_config["key"],
-                            entity_config["name"],
-                            vehicle.vin,
-                            issue=entity_config.get("issue", 3),
-                        )
+                    code_sensor = ToyotaCodeSensor(
+                        cast(VehicleFeatures, entity_config["feature"]),
+                        cast(str, entity_config["icon"]),
+                        entity_config["decode"],
+                        coordinator,
+                        entity_config["key"],
+                        entity_config["name"],
+                        vehicle.vin,
+                        issue=entity_config.get("issue", 3),
                     )
+                    code_sensor._attr_entity_category = entity_config.get(
+                        "entity_category"
+                    )
+                    sensors.append(code_sensor)
                     continue
 
                 sensors.append(

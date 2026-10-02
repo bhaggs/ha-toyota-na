@@ -575,6 +575,8 @@ SENSORS = [
         # report, fetched every few hours; absent, and so not created, where
         # the gateway does not serve the report. See ToyotaDetailsSensor.
         "details": True,
+        # Upkeep rather than the car's main state, like Next service.
+        "entity_category": EntityCategory.DIAGNOSTIC,
         "icon": "mdi:alert-decagram-outline",
         "feature": VehicleFeatures.OpenRecalls,
         "key": "open_recalls",
@@ -588,6 +590,7 @@ SENSORS = [
         "state_class": None,
         "decode": ev_codes.KEY_FOB_BATTERY,
         "issue": 20,
+        "entity_category": EntityCategory.DIAGNOSTIC,
         "icon": "mdi:key-wireless",
         "feature": VehicleFeatures.KeyFobBattery,
         "key": "key_fob_battery",
@@ -598,6 +601,7 @@ SENSORS = [
     },
     {
         "details": True,
+        "entity_category": EntityCategory.DIAGNOSTIC,
         "icon": "mdi:wrench-clock-outline",
         "feature": VehicleFeatures.ServiceCampaigns,
         "key": "service_campaigns",
