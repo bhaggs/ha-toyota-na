@@ -1058,6 +1058,46 @@ async def s11_hatch_lock_and_recalls():
           SeventeenCYPlusToyotaVehicle._command_map[RemoteRequestCommand.TrunkLock] == "trunk-lock"
           and SeventeenCYPlusToyotaVehicle._command_map[RemoteRequestCommand.TrunkUnlock] == "trunk-unlock")
 
+    print("   -- locking an already-locked vehicle --")
+    seen = []
+
+    def watch(entity, vehicle, fail=False):
+        async def send(command):
+            # What the entity shows while the command is in flight.
+            seen.append((command, entity.is_locking, entity.is_unlocking))
+            if fail:
+                raise RuntimeError("refused")
+        vehicle.send_command = send
+        entity._background_refresh = no_refresh
+        entity._heading_to = None
+
+    doors = by_id["JF2ZCACC1R8000001-door_lock"]
+    watch(doors, capable)
+    await doors.async_lock()
+    check("lock sent to locked doors is still sent", len(seen) == 1, str(seen))
+    check("...but shows neither Locking nor Unlocking",
+          seen and seen[-1][1:] == (False, False), str(seen))
+    watch(hatch, capable)
+    await hatch.async_lock()
+    check("locking the unlocked hatch shows Locking",
+          seen[-1][1:] == (True, False), str(seen[-1]))
+    watch(hatch, capable)
+    await hatch.async_unlock()
+    check("unlocking the unlocked hatch shows no transition",
+          seen[-1][1:] == (False, False), str(seen[-1]))
+    watch(doors, capable)
+    await doors.async_unlock()
+    check("unlocking locked doors shows Unlocking",
+          seen[-1][1:] == (False, True), str(seen[-1]))
+    watch(hatch, capable, fail=True)
+    raised = False
+    try:
+        await hatch.async_lock()
+    except RuntimeError:
+        raised = True
+    check("a refused command raises and clears the transition",
+          raised and not hatch.is_locking and not hatch.is_unlocking)
+
     print("   -- recall sensors --")
     recall = {"campaignId": "26V-001", "title": "Example", "vin": "JF2ZCACC1R8000001"}
     capable.features[VehicleFeatures.OpenRecalls] = ToyotaNumeric(1, "")
@@ -1077,6 +1117,14 @@ async def s11_hatch_lock_and_recalls():
           attrs == {"entries": [{"campaignId": "26V-001", "title": "Example"}]}, str(attrs))
     campaigns = s_by_id.get("JF2ZCACC1R8000001-service_campaigns")
     check("Service campaigns reads 0", campaigns is not None and campaigns.state == 0)
+    from homeassistant.const import EntityCategory
+    check("recall sensors are diagnostic",
+          recalls is not None and campaigns is not None
+          and recalls.entity_category == EntityCategory.DIAGNOSTIC
+          and campaigns.entity_category == EntityCategory.DIAGNOSTIC)
+    plug = s_by_id.get("JF2ZCACC1R8000001-charging_plug")
+    check("other code sensors stay uncategorised",
+          plug is not None and plug.entity_category is None)
     check("no recall sensors where the report was not served",
           "JF2ZCACC1R8000002-open_recalls" not in s_by_id
           and "JF2ZCACC1R8000002-service_campaigns" not in s_by_id)
@@ -1158,6 +1206,8 @@ async def s11_hatch_lock_and_recalls():
     fob = kf_by_id.get("JF2ZCACC1R8000001-key_fob_battery")
     check("Key fob battery sensor created", isinstance(fob, sensor.ToyotaCodeSensor))
     check("3 reads Good", fob is not None and fob.state == "Good", str(fob and fob.state))
+    check("key fob battery is diagnostic",
+          fob is not None and fob.entity_category == EntityCategory.DIAGNOSTIC)
     fob_attrs = fob.extra_state_attributes if fob else None
     check("attributes carry the code and a parsed last_reported",
           fob_attrs == {"code": "3", "last_reported": "2026-08-06T16:38:50+00:00"},

@@ -87,7 +87,12 @@ async def async_setup_entry(
 
 class ToyotaLock(ToyotaNABaseEntity, LockEntity):
 
-    _state_changing = False
+    # The state a command in flight is heading for: True for a lock, False for
+    # an unlock, None when nothing is in flight or the vehicle is already
+    # there. Locking/unlocking is reported from this, never inferred from the
+    # current state, which got it backwards whenever a lock was sent to a
+    # vehicle already locked.
+    _heading_to: bool | None = None
     exclude_trunk = False
 
     def __init__(
@@ -120,29 +125,42 @@ class ToyotaLock(ToyotaNABaseEntity, LockEntity):
 
     @property
     def is_locking(self):
-        return self._state_changing is True and self.is_locked is False
+        return self._heading_to is True
 
     @property
     def is_unlocking(self):
-        return self._state_changing is True and self.is_locked is True
+        return self._heading_to is False
 
     async def async_lock(self, **kwargs):
         """Lock all or specified locks. A code to lock the lock with may optionally be specified."""
-        await self.toggle_lock(DOOR_LOCK)
+        await self.toggle_lock(DOOR_LOCK, locked=True)
 
     async def async_unlock(self, **kwargs):
         """Unlock all or specified locks. A code to unlock the lock with may optionally be specified."""
-        await self.toggle_lock(DOOR_UNLOCK)
+        await self.toggle_lock(DOOR_UNLOCK, locked=False)
 
-    async def toggle_lock(self, command: str):
-        """Set the lock state via the provided command string."""
+    async def toggle_lock(self, command: str, locked: bool):
+        """Send a lock or unlock command, showing it in flight until confirmed.
+
+        A command for the state the vehicle already reports is still sent - a
+        nightly "lock everything" routine relies on that as a safety check -
+        but shows no transition, so an already-locked car stays Locked rather
+        than flickering through Locking.
+        """
         if self.vehicle is not None:
             # Captured now: the entity drops it five seconds after the call
             # began, long before the vehicle's confirmation comes back.
             context = self._context
-            self._state_changing = True
-            self.async_write_ha_state()
-            await self.vehicle.send_command(COMMAND_MAP[command])
+            if self.is_locked is not locked:
+                self._heading_to = locked
+                self.async_write_ha_state()
+            try:
+                await self.vehicle.send_command(COMMAND_MAP[command])
+            except Exception:
+                # Refused: nothing is in flight, so don't leave it showing.
+                self._heading_to = None
+                self.async_write_ha_state()
+                raise
             self.hass.async_create_task(self._background_refresh(context))
 
     async def _background_refresh(self, context=None):
@@ -150,12 +168,12 @@ class ToyotaLock(ToyotaNABaseEntity, LockEntity):
         try:
             await self.vehicle.poll_vehicle_refresh()
             await asyncio.sleep(REFRESH_SETTLE_SECONDS)
-            self._state_changing = False
+            self._heading_to = None
             # Credit the confirmed state to whoever locked or unlocked.
             self.coordinator.async_set_cause([self.vin], context)
             await self.coordinator.async_request_refresh()
         except Exception:
-            self._state_changing = False
+            self._heading_to = None
             self.async_write_ha_state()
 
     @property
@@ -185,7 +203,7 @@ class ToyotaTrunkLock(ToyotaLock):
         return trunk.locked
 
     async def async_lock(self, **kwargs):
-        await self.toggle_lock(TRUNK_LOCK)
+        await self.toggle_lock(TRUNK_LOCK, locked=True)
 
     async def async_unlock(self, **kwargs):
-        await self.toggle_lock(TRUNK_UNLOCK)
+        await self.toggle_lock(TRUNK_UNLOCK, locked=False)
