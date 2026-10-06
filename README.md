@@ -30,33 +30,67 @@ is built on.
 
 ## What you get
 
-Most of this requires an active Remote Services subscription.
+Most of this requires an active Remote Services subscription. An entity is only
+created when the vehicle reports its reading, so what you see can vary by model.
 
-**Vehicle state** — doors, windows, moonroof, hood, and trunk open/closed; door
-and trunk lock state; current and last-parked location; odometer, speed, trip A
-and B, fuel level, distance to empty; tire pressures including spare; next
-service; open recalls and service campaigns; key fob battery; last-update
-timestamps.
+`<car>` stands for the vehicle's device name, such as `2026_solterra`, with the
+area in front if one is assigned (see [Entity IDs and Sensor
+Names](#entity-ids-and-sensor-names)). Entities marked *Diagnostic* appear in
+the device page's *Diagnostic* card.
 
-**EV** — battery level, range with and without climate, travelable distance,
-charging state, connector state, plug state, charge type, and charge time both as
-minutes remaining and as the moment charging finishes.
+| Entity | Entity ID | What it does |
+|---|---|---|
+| EV battery | `sensor.<car>_ev_battery` | Battery level, %. |
+| EV range | `sensor.<car>_ev_range` | Estimated range on the current charge, in your account's unit. |
+| EV range with A/C | `sensor.<car>_ev_range_with_a_c` | Estimated range with the climate running. |
+| Charging | `binary_sensor.<car>_charging` | On while the charging cable is latched in, on AC or DC. |
+| Charging plug | `sensor.<car>_charging_plug` | The charge port: *Unplugged*, *Plugged in*, *Charging*, *Charging ended* or *DC charging*. See [Charging sensor values](#charging-sensor-values). |
+| Charging connector | `sensor.<car>_charging_connector` | The cable latch: *Disconnected*, *Unlocked* or *Locked*. |
+| Charging type | `sensor.<car>_charging_type` | Reads 15 on every vehicle so far, so it isn't decoded. Use Charging plug to tell AC from DC. If yours shows anything else, please post it on [#3](https://github.com/bhaggs/ha-toyota-na/issues/3). |
+| Charging time remaining | `sensor.<car>_charging_time_remaining` | Minutes until charging completes, counting down. |
+| Charging finishes | `sensor.<car>_charging_finishes` | The estimated date and time charging completes. |
+| Charging last updated | `sensor.<car>_charging_last_updated` | When the vehicle took its battery and charging readings. |
+| Front driver door | `binary_sensor.<car>_front_driver_door` | Open or closed. |
+| Front passenger door | `binary_sensor.<car>_front_passenger_door` | Open or closed. |
+| Rear driver door | `binary_sensor.<car>_rear_driver_door` | Open or closed. |
+| Rear passenger door | `binary_sensor.<car>_rear_passenger_door` | Open or closed. |
+| Front driver door lock | `binary_sensor.<car>_front_driver_door_lock` | Locked or unlocked. |
+| Front passenger door lock | `binary_sensor.<car>_front_passenger_door_lock` | Locked or unlocked. |
+| Rear driver door lock | `binary_sensor.<car>_rear_driver_door_lock` | Locked or unlocked. |
+| Rear passenger door lock | `binary_sensor.<car>_rear_passenger_door_lock` | Locked or unlocked. |
+| Front driver window | `binary_sensor.<car>_front_driver_window` | Open or closed. |
+| Front passenger window | `binary_sensor.<car>_front_passenger_window` | Open or closed. |
+| Rear driver window | `binary_sensor.<car>_rear_driver_window` | Open or closed. |
+| Rear passenger window | `binary_sensor.<car>_rear_passenger_window` | Open or closed. |
+| Hood | `binary_sensor.<car>_hood` | Open or closed. |
+| Hatch | `binary_sensor.<car>_hatch` | Open or closed.¹ |
+| Hatch lock | `binary_sensor.<car>_hatch_lock` | Locked or unlocked.¹ |
+| Moonroof | `binary_sensor.<car>_moonroof` | Open or closed, where fitted. |
+| Location | `device_tracker.<car>_location` | Where the vehicle is now: home, away or a zone. |
+| Last parked location | `device_tracker.<car>_last_parked_location` | Where the vehicle was last parked. Both come from the same report, so they usually agree. |
+| Odometer | `sensor.<car>_odometer` | Total distance driven. |
+| Trip A | `sensor.<car>_trip_a` | Trip meter A, as shown in the vehicle. |
+| Trip B | `sensor.<car>_trip_b` | Trip meter B, as shown in the vehicle. |
+| Last updated | `sensor.<car>_last_updated` | When the vehicle last uploaded its telemetry: odometer, trips and location. See ["Last updated" looks out of date](#last-updated-looks-out-of-date). |
+| Next service | `sensor.<car>_next_service` | Distance until the next scheduled service. *Diagnostic.* |
+| Open recalls | `sensor.<car>_open_recalls` | The number of open safety recalls, with the details as an attribute. *Diagnostic.* |
+| Service campaigns | `sensor.<car>_service_campaigns` | The number of open service campaigns, with the details as an attribute. *Diagnostic.* |
+| Key fob battery | `sensor.<car>_key_fob_battery` | The key fob battery as the app's *Health* tab shows it, such as *Good*. Its `last_reported` attribute says when the vehicle last reported it, which can be weeks ago. *Diagnostic.* |
+| Doors | `lock.<car>_doors` | Locks and unlocks the doors. |
+| Hatch | `lock.<car>_hatch` | Locks and unlocks the hatch on its own. Only offered where the vehicle takes the command. |
+| Remote start | `switch.<car>_remote_start` | Starts climate preconditioning with the settings saved in the app, despite the name: the command the backend takes is `engine-start`. The switch currently turns itself back off after a few seconds while climate keeps running ([#6](https://github.com/bhaggs/ha-toyota-na/issues/6)). |
+| Hazards | `button.<car>_hazards` | Flashes the hazard lights. The vehicle stops them after about a minute on its own. |
+| Buzzer | `button.<car>_buzzer` | A short beep from the vehicle's external speaker, for finding it in a parking lot. |
+| Horn | `button.<car>_horn` | Two short chirps of the horn. Louder than the buzzer. |
+| Headlights | `button.<car>_headlights` | Turns on the headlights. The vehicle turns them off itself. |
+| Refresh | `button.<car>_refresh` | Re-reads what the servers already hold. Never contacts the vehicle, so it costs nothing. |
+| Poll vehicle | `button.<car>_poll_vehicle` | Wakes the vehicle and tells it to upload fresh state. The only control that touches the vehicle: see [Polling and the 12V battery](#polling-and-the-12v-battery). |
 
-**Controls**
+¹ Installs from before `2.7.0-subaru.19` keep their original IDs,
+`binary_sensor.<car>_trunk` and `binary_sensor.<car>_trunk_lock`: Home Assistant
+doesn't change an entity's ID when its name changes.
 
-| Control | What it does |
-|---|---|
-| Doors | Lock and unlock. |
-| Hatch | Locks and unlocks the hatch on its own. Only offered where the vehicle takes the command. |
-| Remote start | Climate preconditioning, despite the name — the command the backend takes is `engine-start`. A switch rather than buttons, because the vehicle reports whether it is running and for how much longer. |
-| Hazards | Flashes the hazard lights. Momentary: the vehicle stops them after about a minute on its own. |
-| Buzzer | A short digital beep from the vehicle's external speaker, for locating it in a parking lot. |
-| Horn | Two short chirps of the actual horn. Louder and more attention-getting than the buzzer. |
-| Headlights | Turns on the headlights. Momentary, like the hazards — the vehicle turns them off itself. |
-| Refresh | Re-reads what the servers already hold. Never contacts the vehicle, so it costs nothing. |
-| Poll vehicle | Wakes the telematics unit and tells it to upload fresh state. The only control that touches the vehicle — see [Polling and the 12V battery](#polling-and-the-12v-battery). |
-
-Every control is available both as an entity and as a service.
+The locks, Remote start, and every button are also available as services.
 
 ### Charging sensor values
 
@@ -250,7 +284,7 @@ independent records that refresh at different moments:
 
 | What you see | Comes from | Moves when |
 |---|---|---|
-| **Last updated**, odometer, range, location, tire pressures | telemetry | the vehicle uploads new telemetry |
+| **Last updated**, odometer, trips, location | telemetry | the vehicle uploads new telemetry |
 | **Charging last updated**, battery level, charging plug and connector, charging time | electric status | the vehicle reports a charging change |
 | Doors, locks, windows, hood, hatch | remote status | the vehicle reports an opening change |
 
