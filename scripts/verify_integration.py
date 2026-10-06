@@ -1122,6 +1122,12 @@ async def s11_hatch_lock_and_recalls():
           recalls is not None and campaigns is not None
           and recalls.entity_category == EntityCategory.DIAGNOSTIC
           and campaigns.entity_category == EntityCategory.DIAGNOSTIC)
+    travelable = s_by_id.get("JF2ZCACC1R8000001-ev_travelable_distance")
+    ev_range = s_by_id.get("JF2ZCACC1R8000001-ev_range")
+    check("EV travelable distance is off by default on new installs",
+          travelable is not None and travelable.entity_registry_enabled_default is False)
+    check("...while EV range stays on",
+          ev_range is not None and ev_range.entity_registry_enabled_default is True)
     plug = s_by_id.get("JF2ZCACC1R8000001-charging_plug")
     check("other code sensors stay uncategorised",
           plug is not None and plug.entity_category is None)

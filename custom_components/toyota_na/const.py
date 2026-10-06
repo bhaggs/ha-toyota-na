@@ -537,6 +537,9 @@ SENSORS = [
         "icon": "mdi:gauge",
         "feature": VehicleFeatures.EvTravelableDistance,
         "key": "ev_travelable_distance",
+        # The same reading as EV range, always in km: identical on a metric
+        # install. Kept, but off by default on new installs. See #26.
+        "enabled_default": False,
         "name": "EV travelable distance",
         "unit": UnitOfLength.KILOMETERS,
         "subscription": True,

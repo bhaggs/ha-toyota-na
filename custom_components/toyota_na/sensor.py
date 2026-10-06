@@ -109,20 +109,24 @@ async def async_setup_entry(
                     sensors.append(code_sensor)
                     continue
 
-                sensors.append(
-                    ToyotaNumericSensor(
-                        cast(VehicleFeatures, feature_sensor["feature"]),
-                        cast(str, entity_config["icon"]),
-                        cast(str, entity_config.get("unit", "")),
-                        cast(SensorStateClass, entity_config.get("state_class")),
-                        cast(SensorDeviceClass, entity_config.get("device_class")),
-                        entity_config.get("entity_category"),
-                        coordinator,
-                        entity_config["key"],
-                        entity_config["name"],
-                        vehicle.vin,
-                    )
+                numeric_sensor = ToyotaNumericSensor(
+                    cast(VehicleFeatures, feature_sensor["feature"]),
+                    cast(str, entity_config["icon"]),
+                    cast(str, entity_config.get("unit", "")),
+                    cast(SensorStateClass, entity_config.get("state_class")),
+                    cast(SensorDeviceClass, entity_config.get("device_class")),
+                    entity_config.get("entity_category"),
+                    coordinator,
+                    entity_config["key"],
+                    entity_config["name"],
+                    vehicle.vin,
                 )
+                # Only consulted when Home Assistant first creates the entity,
+                # so turning a default off leaves existing installs as they are.
+                numeric_sensor._attr_entity_registry_enabled_default = entity_config.get(
+                    "enabled_default", True
+                )
+                sensors.append(numeric_sensor)
 
     async_add_devices(sensors, True)
 
