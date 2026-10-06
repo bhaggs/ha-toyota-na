@@ -14,7 +14,7 @@ be different code without colliding. For history before the fork, see
 
 Nothing yet.
 
-## [2.7.0-subaru.19] - 2026-10-01
+## [2.7.0-subaru.19] - 2026-10-06
 
 ### Added
 
@@ -42,6 +42,10 @@ Nothing yet.
 - **Open recalls**, **Service campaigns** and **Key fob battery** are diagnostic
   entities, like **Next service**: they appear in the device page's
   *Diagnostic* card and stay out of auto-generated dashboards.
+- **EV travelable distance** is disabled by default on new installs. It's the
+  same reading as **EV range**, always in km, so on a metric install the two
+  look identical. Existing installs keep it as it is, and it can be enabled from
+  the entity list.
 
 ### Fixed
 
