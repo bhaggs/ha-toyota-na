@@ -14,15 +14,14 @@ be different code without colliding. For history before the fork, see
 
 Nothing yet.
 
-## [2.7.0-subaru.19] - 2026-10-06
+## [2.7.0-subaru.19] - 2026-10-07
 
 ### Added
 
 - **Charging last updated**, when the vehicle took its battery and charging
   readings. They come from a different record from **Last updated**, which is
   why a finished charge can move the battery level without moving Last updated.
-- **Hatch** lock, for vehicles whose listing says they take the command. It
-  locks and unlocks the hatch on its own. The **Doors** lock no longer counts the
+- **Hatch** lock. Locks and unlocks the hatch on its own. The **Doors** lock no longer counts the
   hatch on those vehicles, so an unlocked hatch stops showing the doors as
   unlocked.
 - **Open recalls** and **Service campaigns** sensors: a count of each, with the
@@ -32,16 +31,14 @@ Nothing yet.
 - **Key fob battery**, as the app's *Health* tab shows it, with a
   `last_reported` attribute for when the vehicle last reported it, which the app
   doesn't show and can be weeks ago. Only *Good* is known so far; any other
-  reading shows as its code.
+  reading shows as its code. If yours shows one, please post it on
+  [#20](https://github.com/bhaggs/ha-toyota-na/issues/20).
 
 ### Changed
 
 - The **Trunk** and **Trunk lock** binary sensors are named **Hatch** and
   **Hatch lock**, as the vehicle and the app call it. Only the names change:
   existing entity IDs, history and automations are kept.
-- **Open recalls**, **Service campaigns** and **Key fob battery** are diagnostic
-  entities, like **Next service**: they appear in the device page's
-  *Diagnostic* card and stay out of auto-generated dashboards.
 - **EV travelable distance** is disabled by default on new installs. It's the
   same reading as **EV range**, always in km, so on a metric install the two
   look identical. Existing installs keep it as it is, and it can be enabled from
