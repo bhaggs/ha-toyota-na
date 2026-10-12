@@ -14,6 +14,19 @@ be different code without colliding. For history before the fork, see
 
 Nothing yet.
 
+## [2.7.0-subaru.20] - 2026-10-12
+
+### Fixed
+
+- A network outage no longer leaves the integration stuck until a reload.
+  Every entity went unavailable when a cloud read failed, including the
+  **Refresh** and **Poll vehicle** buttons, so there was nothing to press to
+  recover, and the next try waited a full refresh interval. Now the buttons stay
+  available, and when the servers can't be reached at all (a timeout, a DNS
+  failure) the next try comes after 1, 2, 5, then 10 minutes, never later than
+  the refresh interval. Sensors still show as unavailable until a read succeeds.
+- An outage logs one warning line instead of an error with a full traceback.
+
 ## [2.7.0-subaru.19] - 2026-10-07
 
 ### Added
