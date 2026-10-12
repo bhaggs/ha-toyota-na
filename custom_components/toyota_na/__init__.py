@@ -57,7 +57,7 @@ from .const import (
     REFRESH,
     SEND_COMMAND,
 )
-from .coordinator import ToyotaCoordinator
+from .coordinator import ToyotaCoordinator, is_connection_error
 from .polling import (
     async_poll_now,
     fetch_interval,
@@ -391,7 +391,18 @@ async def update_vehicles_status(hass: HomeAssistant, client: OneClient, entry: 
         _LOGGER.debug("Authentication failed, requesting reauth: %s", e)
         raise ConfigEntryAuthFailed(e) from e
     except Exception as e:
-        _LOGGER.exception("Error fetching data")
+        if is_connection_error(e):
+            # A home internet drop or DNS failure, not a fault here: one line,
+            # with the traceback only at debug. The coordinator retries within
+            # minutes (see coordinator.CONNECTION_RETRY_SECONDS).
+            _LOGGER.warning(
+                "Couldn't reach the %s servers: %s. Retrying shortly.",
+                client.brand.name,
+                e,
+            )
+            _LOGGER.debug("Connection failure detail", exc_info=True)
+        else:
+            _LOGGER.exception("Error fetching data")
         raise UpdateFailed(e) from e
 
 

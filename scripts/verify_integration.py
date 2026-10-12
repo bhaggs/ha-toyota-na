@@ -1292,6 +1292,151 @@ async def s11_hatch_lock_and_recalls():
           listed and listed[0].capabilities.get("trunkLockUnlockCapable") is True)
 
 
+async def s12_network_outage():
+    import aiohttp
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    from custom_components.toyota_na import button, sensor
+    from custom_components.toyota_na import update_vehicles_status
+    from custom_components.toyota_na.coordinator import (
+        CONNECTION_RETRY_SECONDS,
+        is_connection_error,
+    )
+
+    def outage():
+        return aiohttp.ServerTimeoutError("Timeout while contacting DNS servers")
+
+    print("   -- what counts as not reaching the servers --")
+    wrapped = UpdateFailed("x")
+    wrapped.__cause__ = outage()
+    check("a timeout wrapped in UpdateFailed is a connection error", is_connection_error(wrapped))
+    check("so is asyncio's TimeoutError", is_connection_error(asyncio.TimeoutError()))
+    refused = UpdateFailed("x")
+    refused.__cause__ = RuntimeError("500 Internal Server Error")
+    check("a server error is not", not is_connection_error(refused))
+
+    print("   -- retry backoff --")
+    hass = new_hass()
+    entry = fake_entry()
+    vehicles = [FakeVehicle("JF2ZCACC1R8000001")]
+    coordinator = make_coordinator(hass, entry, vehicles)
+    coordinator.update_interval = timedelta(hours=1)
+    failing = {"error": outage}
+
+    async def update():
+        if failing["error"] is not None:
+            try:
+                raise failing["error"]()
+            except Exception as e:
+                raise UpdateFailed(e) from e
+        return vehicles
+
+    coordinator.update_method = update
+    delays = []
+    for _ in range(5):
+        try:
+            await coordinator._async_update_data()
+        except UpdateFailed as err:
+            delays.append(err.retry_after)
+    check("retries back off 1, 2, 5, 10, 10 minutes",
+          delays == [60, 120, 300, 600, 600], str(delays))
+    failing["error"] = None
+    await coordinator._async_update_data()
+    check("a successful read resets the backoff", coordinator.connection_failures == 0)
+    coordinator.update_interval = timedelta(minutes=3)
+    failing["error"] = outage
+    capped = []
+    for _ in range(3):
+        try:
+            await coordinator._async_update_data()
+        except UpdateFailed as err:
+            capped.append(err.retry_after)
+    check("never longer than the refresh interval", capped == [60, 120, 180], str(capped))
+    failing["error"] = lambda: RuntimeError("500 Internal Server Error")
+    coordinator.connection_failures = 0
+    try:
+        await coordinator._async_update_data()
+        other = "no error"
+    except UpdateFailed as err:
+        other = err.retry_after
+    check("a server error keeps the normal schedule", other is None, str(other))
+
+    print("   -- through Home Assistant's own refresh --")
+    failing["error"] = outage
+    coordinator.connection_failures = 0
+    scheduled = []
+    real_schedule = coordinator._schedule_refresh
+
+    def spy_schedule():
+        scheduled.append(coordinator._retry_after)
+        real_schedule()
+
+    coordinator._schedule_refresh = spy_schedule
+    # Home Assistant only schedules for a coordinator with listeners, which in
+    # real use are the entities.
+    remove_listener = coordinator.async_add_listener(lambda: None)
+    scheduled.clear()
+    await coordinator.async_refresh()
+    check("the read is marked failed", coordinator.last_update_success is False)
+    check("Home Assistant schedules the next try a minute out", scheduled == [60], str(scheduled))
+    remove_listener()
+    coordinator._async_unsub_refresh()
+
+    print("   -- buttons during an outage --")
+    hass.data[DOMAIN] = {"e1": {"coordinator": coordinator}}
+    buttons = []
+    await button.async_setup_entry(hass, entry, lambda e, *a, **k: buttons.extend(e))
+    b_by_id = {x.unique_id: x for x in buttons}
+    check("Refresh stays available", b_by_id["JF2ZCACC1R8000001-refresh"].available is True)
+    check("Poll vehicle stays available", b_by_id["JF2ZCACC1R8000001-poll_vehicle"].available is True)
+    check("Horn stays available", b_by_id["JF2ZCACC1R8000001-horn"].available is True)
+    sensors = []
+    await sensor.async_setup_entry(hass, entry, lambda e, *a, **k: sensors.extend(e))
+    check("sensors go unavailable", sensors and all(not x.available for x in sensors))
+    coordinator.data = []
+    check("with no vehicle known, Refresh is still available",
+          b_by_id["JF2ZCACC1R8000001-refresh"].available is True)
+    check("...but the commands aren't", b_by_id["JF2ZCACC1R8000001-horn"].available is False)
+
+    print("   -- logging --")
+    records = []
+
+    class Grab(logging.Handler):
+        def emit(self, record):
+            records.append((record.levelno, record.getMessage(), record.exc_info is not None))
+
+    grab = Grab()
+    logger = logging.getLogger("custom_components.toyota_na")
+    logger.addHandler(grab)
+    old_level = logger.level
+    logger.setLevel(logging.DEBUG)
+
+    class Client:
+        def __init__(self, error):
+            self.error = error
+            self.brand = get_brand("S")
+
+        async def get_user_vehicle_list(self):
+            raise self.error
+
+    try:
+        for error in (outage(), RuntimeError("500 Internal Server Error")):
+            try:
+                await update_vehicles_status(hass, Client(error), entry)
+            except UpdateFailed:
+                pass
+    finally:
+        logger.removeHandler(grab)
+        logger.setLevel(old_level)
+    net = [r for r in records if "Couldn't reach" in r[1]]
+    check("an outage logs one warning, without a traceback",
+          len(net) == 1 and net[0][0] == logging.WARNING and not net[0][2], str(net))
+    check("...and its detail only at debug",
+          any(r[0] == logging.DEBUG and r[2] for r in records))
+    check("other failures still log the error with a traceback",
+          any(r[0] == logging.ERROR and r[1] == "Error fetching data" and r[2] for r in records))
+
+
 SECTIONS = [
     ("1. async_setup, services, options flow", s1_setup_and_services),
     ("2. interval options matrix", s2_interval_matrix),
@@ -1304,6 +1449,7 @@ SECTIONS = [
     ("9. Activity details end to end, through the recorder and logbook", s9_logbook_end_to_end),
     ("10. refused polls are not counted", s10_refused_polls),
     ("11. hatch lock, recall, key fob and charging-time sensors", s11_hatch_lock_and_recalls),
+    ("12. a network outage", s12_network_outage),
 ]
 
 

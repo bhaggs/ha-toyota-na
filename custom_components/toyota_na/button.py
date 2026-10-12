@@ -82,6 +82,21 @@ class ToyotaButton(ToyotaNABaseEntity, ButtonEntity):
     def icon(self) -> str:
         return self._icon
 
+    @property
+    def available(self) -> bool:
+        """Stay pressable when a cloud read fails.
+
+        Entities fed by the coordinator go unavailable when its last read
+        failed, and Home Assistant won't run a service call against an
+        unavailable entity. For the buttons that meant a network outage took
+        away Refresh, the one control for recovering from it, until the
+        integration was reloaded (bhaggs/ha-toyota-na#27). Refresh needs only
+        the cloud; the commands need the vehicle the last read found.
+        """
+        if self._action == REFRESH:
+            return True
+        return self.vehicle is not None
+
     async def async_press(self) -> None:
         # Refresh touches only the cloud, so it needs neither a reachable
         # vehicle object nor a subscription. Handled before those checks.

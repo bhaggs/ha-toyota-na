@@ -22,14 +22,16 @@ Where nothing started an update - a scheduled poll, or the regular refresh
 noticing a report the vehicle made on its own - the integration fires one of its
 own events and uses that as the cause. Those are described in logbook.py.
 """
+import asyncio
 import time
 
+import aiohttp
 from toyota_na.vehicle.base_vehicle import ToyotaVehicle, VehicleFeatures
 
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, EVENT_VEHICLE_POLLED, EVENT_VEHICLE_REPORT
 
@@ -37,6 +39,28 @@ from .const import DOMAIN, EVENT_VEHICLE_POLLED, EVENT_VEHICLE_REPORT
 # gateway. Short enough that a press cannot be credited with a report the
 # vehicle makes on its own much later.
 CAUSE_TTL_SECONDS = 120
+
+# Retry delays after consecutive failures to reach the servers at all, never
+# longer than the refresh interval. A home internet drop or a DNS hiccup
+# clears in minutes; waiting a full interval (an hour, for some) to notice
+# was the problem in bhaggs/ha-toyota-na#27.
+CONNECTION_RETRY_SECONDS = (60, 120, 300, 600)
+
+
+def is_connection_error(error: BaseException | None) -> bool:
+    """Whether a failure was not reaching the servers, rather than a refusal.
+
+    Only these retry early. A rejection, rate limit or server error keeps the
+    normal schedule, so a server that is refusing us isn't asked more often.
+    Follows the cause chain, since the error arrives wrapped in UpdateFailed.
+    """
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(error, (aiohttp.ClientConnectionError, asyncio.TimeoutError)):
+            return True
+        error = error.__cause__ or error.__context__
+    return False
 
 # A cause is only credited with a report made after it was set. The report time
 # comes from the vehicle and the gateway rather than this machine's clock, so
@@ -125,11 +149,27 @@ class ToyotaCoordinator(DataUpdateCoordinator[list[ToyotaVehicle]]):
             self.async_set_cause([vin], cause)
             self.update_contexts[vin] = cause
 
+    connection_failures = 0
+
     async def _async_update_data(self) -> list[ToyotaVehicle]:
         # Nothing left over from a dispatch that never happened may leak into
         # this one.
         self.update_contexts = {}
-        vehicles = await super()._async_update_data()
+        try:
+            vehicles = await super()._async_update_data()
+        except UpdateFailed as err:
+            if is_connection_error(err):
+                delay = CONNECTION_RETRY_SECONDS[
+                    min(self.connection_failures, len(CONNECTION_RETRY_SECONDS) - 1)
+                ]
+                if self.update_interval is not None:
+                    delay = min(delay, self.update_interval.total_seconds())
+                self.connection_failures += 1
+                # Honoured by Home Assistant's own scheduler, in place of the
+                # usual interval, for this one attempt.
+                err.retry_after = delay
+            raise
+        self.connection_failures = 0
         self._async_resolve_causes(vehicles)
         return vehicles
 
