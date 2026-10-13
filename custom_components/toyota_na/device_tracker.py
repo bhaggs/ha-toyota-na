@@ -95,4 +95,8 @@ class ToyotaDeviceTracker(ToyotaNABaseEntity, TrackerEntity):
 
     @property
     def available(self):
-        return self.feature(self._feature) is not None
+        # Unavailable while cloud reads are failing, like the sensors: a door
+        # shown as closed or a car shown at home during an outage looks
+        # current but may not be. The last value stays in history. Only the
+        # controls - buttons and locks - stay usable (bhaggs/ha-toyota-na#27).
+        return super().available and self.feature(self._feature) is not None
