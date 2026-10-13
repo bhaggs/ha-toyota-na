@@ -32,6 +32,7 @@ CONNECTOR_STATUS_CHARGING = 5
 
 PLUG_STATUS = {
     12: "Unplugged",
+    32: "Connecting",
     36: "Plugged in",
     40: "Charging",
     45: "Charging ended",
@@ -46,10 +47,18 @@ seen at a DC fast charger - 56 with Plug & Charge, 60 with an app-started
 session. They share a label because the distinction is how the session was
 authorized, not what the vehicle is doing.
 
+32 was seen on a 2026 Trailseeker for about two minutes between plugging in and
+charging starting (bhaggs/ha-toyota-na#3). "Connecting" says the cable is in
+and the vehicle and charger have not settled on what to do yet. It gets its own
+label rather than sharing 36's, so the difference shows without reading the
+code attribute; "Preparing to charge" would be wrong if a charge schedule takes
+it to 36 instead of 40.
+
 The values look like packed flags rather than a flat enum: 32 is set on every
 plugged state and clear only on 12, and 16 is set only on the two DC readings.
-Six samples is not enough to decode the rest, so they are treated as an enum for
-now and unknown codes pass through unchanged.
+32 on its own fits that: plugged in, nothing else yet. Seven samples is not
+enough to decode the rest, so they are treated as an enum for now and unknown
+codes pass through unchanged.
 """
 
 CHARGE_TYPE: dict[int, str] = {}

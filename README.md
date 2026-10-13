@@ -44,7 +44,7 @@ the device page's *Diagnostic* card.
 | EV range | `sensor.<car>_ev_range` | Estimated range on the current charge, in your account's unit. |
 | EV range with A/C | `sensor.<car>_ev_range_with_a_c` | Estimated range with the climate running. |
 | Charging | `binary_sensor.<car>_charging` | On while the charging cable is latched in, on AC or DC. |
-| Charging plug | `sensor.<car>_charging_plug` | The charge port: *Unplugged*, *Plugged in*, *Charging*, *Charging ended* or *DC charging*. See [Charging sensor values](#charging-sensor-values). |
+| Charging plug | `sensor.<car>_charging_plug` | The charge port: *Unplugged*, *Connecting*, *Plugged in*, *Charging*, *Charging ended* or *DC charging*. See [Charging sensor values](#charging-sensor-values). |
 | Charging connector | `sensor.<car>_charging_connector` | The cable latch: *Disconnected*, *Unlocked* or *Locked*. |
 | Charging type | `sensor.<car>_charging_type` | Reads 15 on every vehicle so far, so it isn't decoded. Use Charging plug to tell AC from DC. If yours shows anything else, please post it on [#3](https://github.com/bhaggs/ha-toyota-na/issues/3). |
 | Charging time remaining | `sensor.<car>_charging_time_remaining` | Minutes until charging completes, counting down. |
@@ -105,6 +105,7 @@ its number as a `code` attribute.
 | State | Code | Seen when |
 |---|---|---|
 | Unplugged | 12 | No cable. |
+| Connecting | 32 | Just plugged in, before charging starts or a schedule takes over. Seen for about two minutes. |
 | Plugged in | 36 | Plugged in but not charging, such as waiting on a charge schedule. |
 | Charging | 40 | Charging from an AC charger (confirmed on Level 1). |
 | Charging ended | 45 | Still plugged in after a session stops. It doesn't say why: a full battery and a charger losing power both read 45. |
