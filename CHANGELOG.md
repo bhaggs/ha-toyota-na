@@ -14,17 +14,26 @@ be different code without colliding. For history before the fork, see
 
 Nothing yet.
 
-## [2.7.0-subaru.20] - 2026-10-12
+## [2.7.0-subaru.20] - 2026-10-13
+
+### Added
+
+- **Charging plug** shows *Connecting* for code 32, the moment just after
+  plugging in and before charging starts.
 
 ### Fixed
 
 - A network outage no longer leaves the integration stuck until a reload.
-  Every entity went unavailable when a cloud read failed, including the
-  **Refresh** and **Poll vehicle** buttons, so there was nothing to press to
+  A failed cloud read made the **Refresh** and **Poll vehicle** buttons
+  unavailable along with the sensors, so there was nothing to press to
   recover, and the next try waited a full refresh interval. Now the buttons stay
   available, and when the servers can't be reached at all (a timeout, a DNS
   failure) the next try comes after 1, 2, 5, then 10 minutes, never later than
-  the refresh interval. Sensors still show as unavailable until a read succeeds.
+  the refresh interval.
+- During an outage, every reading now shows as unavailable until a read
+  succeeds: the sensors, and also the doors, windows, locks' state and location,
+  which used to keep their last value. Those looked current but might not be;
+  the last value is still in the entity's history.
 - An outage logs one warning line instead of an error with a full traceback.
 
 ## [2.7.0-subaru.19] - 2026-10-07
