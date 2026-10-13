@@ -712,18 +712,26 @@ async def s9_logbook_end_to_end():
     reports = FrameReports()
     frame_log = logging.getLogger("homeassistant.helpers.frame")
     frame_log.addHandler(reports)
+    async def caused_by(event_type):
+        """Fire a cause event, then let the clock move on before the state write.
+
+        The logbook orders rows by timestamp and treats the first row it reads
+        for a context as that context's origin. Firing and writing on adjacent
+        lines can land both in the same microsecond, and the database may then
+        return the state row first, losing the cause: an occasional flake. In
+        the integration the coordinator's dispatch runs between the two, so the
+        event comes first; this keeps the test to that order.
+        """
+        context = async_fire_cause(hass, "entry-e2e", event_type, vin)
+        fired_by = time.time()
+        while time.time() == fired_by:
+            await asyncio.sleep(0)
+        return context
+
     try:
         hass.states.async_set(entity_id, "initial")
-        hass.states.async_set(
-            entity_id,
-            "polled",
-            context=async_fire_cause(hass, "entry-e2e", EVENT_VEHICLE_POLLED, vin),
-        )
-        hass.states.async_set(
-            entity_id,
-            "reported",
-            context=async_fire_cause(hass, "entry-e2e", EVENT_VEHICLE_REPORT, vin),
-        )
+        hass.states.async_set(entity_id, "polled", context=await caused_by(EVENT_VEHICLE_POLLED))
+        hass.states.async_set(entity_id, "reported", context=await caused_by(EVENT_VEHICLE_REPORT))
         # A press as Home Assistant actually delivers one: a service call, which
         # records a call_service event under the caller's context. User ids are
         # UUID hex; the recorder silently drops anything else.
@@ -1196,6 +1204,9 @@ async def s11_hatch_lock_and_recalls():
     check("key fob code read from the health status",
           first.features[VehicleFeatures.KeyFobBattery].value == "3")
 
+    from custom_components.toyota_na import ev_codes
+    check("plug code 32 reads Connecting", ev_codes.plug_status(32) == "Connecting")
+
     print("   -- key fob sensor --")
     kf_hass = new_hass()
     kf = FakeVehicle("JF2ZCACC1R8000001")
@@ -1393,6 +1404,29 @@ async def s12_network_outage():
     sensors = []
     await sensor.async_setup_entry(hass, entry, lambda e, *a, **k: sensors.extend(e))
     check("sensors go unavailable", sensors and all(not x.available for x in sensors))
+    from custom_components.toyota_na import binary_sensor, device_tracker, lock
+
+    def setup(module):
+        added = []
+        return module.async_setup_entry(
+            hass, entry, lambda e, *a, **k: added.extend(e)
+        ), added
+
+    readings = {}
+    for name, module in (("binary sensors", binary_sensor), ("trackers", device_tracker), ("locks", lock)):
+        pending, added = setup(module)
+        await pending
+        readings[name] = added
+    check("binary sensors go unavailable too",
+          readings["binary sensors"] and all(not x.available for x in readings["binary sensors"]))
+    check("location trackers go unavailable too",
+          readings["trackers"] and all(not x.available for x in readings["trackers"]))
+    check("locks stay usable",
+          readings["locks"] and all(x.available for x in readings["locks"]))
+    coordinator.last_update_success = True
+    check("all come back once a read succeeds",
+          all(x.available for x in readings["binary sensors"] + readings["trackers"]))
+    coordinator.last_update_success = False
     coordinator.data = []
     check("with no vehicle known, Refresh is still available",
           b_by_id["JF2ZCACC1R8000001-refresh"].available is True)
