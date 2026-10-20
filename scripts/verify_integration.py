@@ -1512,6 +1512,38 @@ async def s13_brand_images():
               _read_brand_file(brand_dir, image.name) == data)
 
 
+async def s14_brand_choice():
+    # Everything that identifies an existing entry treats Toyota, and a
+    # missing brand, as it did before brands existed.
+    from custom_components.toyota_na.const import BRAND
+
+    def form_default(result):
+        for key in result["data_schema"].schema:
+            if key == BRAND:
+                return key.default()
+
+    async def open_form(data):
+        flow = config_flow.ToyotaNAConfigFlow()
+        flow.hass = new_hass()
+        return form_default(await flow.async_step_reauth(data))
+
+    check("reauth of a Toyota entry stays Toyota",
+          await open_form({BRAND: "T", "email": "a@b.c"}) == "T")
+    check("reauth of an entry from before brands stays Toyota",
+          await open_form({"email": "a@b.c"}) == "T")
+    check("reauth of a Subaru entry stays Subaru",
+          await open_form({BRAND: "S", "email": "a@b.c"}) == "S")
+    check("an entry with no brand still sets up as Toyota",
+          get_brand(None).code == "T")
+    unique_id = config_flow.ToyotaNAConfigFlow._unique_id
+    check("a Toyota entry keeps its unprefixed unique_id",
+          unique_id({BRAND: "T", "email": "a@b.c"}) == f"{DOMAIN}:a@b.c")
+    check("so does an entry from before brands",
+          unique_id({"email": "a@b.c"}) == f"{DOMAIN}:a@b.c")
+    check("a Subaru entry keeps its prefixed unique_id",
+          unique_id({BRAND: "S", "email": "a@b.c"}) == f"{DOMAIN}:S:a@b.c")
+
+
 SECTIONS = [
     ("1. async_setup, services, options flow", s1_setup_and_services),
     ("2. interval options matrix", s2_interval_matrix),
@@ -1526,6 +1558,7 @@ SECTIONS = [
     ("11. hatch lock, recall, key fob and charging-time sensors", s11_hatch_lock_and_recalls),
     ("12. a network outage", s12_network_outage),
     ("13. brand images", s13_brand_images),
+    ("14. existing entries keep their brand", s14_brand_choice),
 ]
 
 
