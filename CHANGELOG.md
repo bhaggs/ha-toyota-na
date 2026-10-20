@@ -14,12 +14,18 @@ be different code without colliding. For history before the fork, see
 
 Nothing yet.
 
-## [2.7.0-subaru.20] - 2026-10-13
+## [2.7.0-subaru.20] - 2026-10-20
 
 ### Added
 
 - **Charging plug** shows *Connecting* for code 32, the moment just after
   plugging in and before charging starts.
+- A SubaruConnect icon in place of the Toyota one, on Home Assistant's
+  integration pages. It takes a restart after updating to appear.
+
+### Changed
+
+- The integration is now named **Subaru / Toyota (North America)**.
 
 ### Fixed
 
