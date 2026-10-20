@@ -9,3 +9,5 @@ custom_components/toyota_na/binary_sensor.py -text
 custom_components/toyota_na/config_flow.py -text
 custom_components/toyota_na/manifest.json -text
 custom_components/toyota_na/sensor.py -text
+
+*.png binary

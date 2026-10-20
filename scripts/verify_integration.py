@@ -1471,6 +1471,47 @@ async def s12_network_outage():
           any(r[0] == logging.ERROR and r[1] == "Error fetching data" and r[2] for r in records))
 
 
+async def s13_brand_images():
+    # HA 2026.3+ serves custom_components/<domain>/brand/ ahead of the brands
+    # CDN. Every image falls back to icon.png, so it is the one HA needs; the
+    # sizes are the brands repository's rules, which HA itself doesn't enforce.
+    import custom_components
+    from homeassistant.components.brands import _read_brand_file
+    from homeassistant.components.brands.const import ALLOWED_IMAGES
+
+    hass = new_hass()
+    loader.async_setup(hass)
+    integration = await hass.async_add_executor_job(
+        loader.Integration.resolve_from_root, hass, custom_components, DOMAIN
+    )
+    brand_dir = Path(integration.file_path) / "brand"
+    images = sorted(brand_dir.glob("*.png")) if brand_dir.is_dir() else []
+    if not images:
+        print("  (no brand images yet; Home Assistant uses the brands CDN)")
+        return
+
+    check("HA sees the brand directory", integration.has_branding)
+    check("brand/ has icon.png, the fallback for every image",
+          (brand_dir / "icon.png").is_file())
+    for image in images:
+        data = image.read_bytes()
+        check(f"{image.name} is a name HA serves", image.name in ALLOWED_IMAGES)
+        check(f"{image.name} is a PNG", data[:8] == b"\x89PNG\r\n\x1a\n")
+        width = int.from_bytes(data[16:20], "big")
+        height = int.from_bytes(data[20:24], "big")
+        scale = 2 if "@2x" in image.name else 1
+        if "icon" in image.name:
+            check(f"{image.name} is {256 * scale}x{256 * scale}",
+                  (width, height) == (256 * scale, 256 * scale), f"{width}x{height}")
+        else:
+            check(f"{image.name}'s shortest side is {128 * scale}-{256 * scale}",
+                  128 * scale <= min(width, height) <= 256 * scale, f"{width}x{height}")
+            check(f"{image.name} is at most {1024 * scale} wide",
+                  width <= 1024 * scale, f"{width}x{height}")
+        check(f"HA serves {image.name} from brand/",
+              _read_brand_file(brand_dir, image.name) == data)
+
+
 SECTIONS = [
     ("1. async_setup, services, options flow", s1_setup_and_services),
     ("2. interval options matrix", s2_interval_matrix),
@@ -1484,6 +1525,7 @@ SECTIONS = [
     ("10. refused polls are not counted", s10_refused_polls),
     ("11. hatch lock, recall, key fob and charging-time sensors", s11_hatch_lock_and_recalls),
     ("12. a network outage", s12_network_outage),
+    ("13. brand images", s13_brand_images),
 ]
 
 

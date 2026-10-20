@@ -23,6 +23,10 @@ every remote command works over the older `/oneapi/` command endpoint.
 - `coordinator.py`, `logbook.py`: Activity details causes (HA 2026.9).
 - `polling.py`: refresh and poll intervals. The poll interval is a staleness
   floor, tracked per VIN.
+- `brand/`: integration icon and logo PNGs, which HA 2026.3+ serves ahead of
+  the brands CDN. Names and sizes are checked by the harness. `icon.png` is
+  the fallback for every other image. HA lists the directory at startup, so it
+  takes a restart to pick up a newly added `brand/`.
 
 ## Rules
 
