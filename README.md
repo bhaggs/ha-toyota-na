@@ -19,9 +19,9 @@ Requires [HACS](https://hacs.xyz/docs/setup/download).
 
 1. HACS → ⋮ → **Custom repositories**
 2. Add `https://github.com/bhaggs/ha-toyota-na` as an **Integration**
-3. Install **Toyota / Subaru (North America)**, then restart Home Assistant
+3. Install **Subaru / Toyota (North America)**, then restart Home Assistant
 4. **Settings → Devices & Services → Add Integration**, search for
-   *Toyota / Subaru (North America)*
+   *Subaru / Toyota (North America)*
 5. Choose **Subaru**, sign in, and enter the one-time code sent to your email or
    phone
 
@@ -164,7 +164,7 @@ Two things happen on a timer, and only one of them touches the vehicle.
 | **Refresh** | Reads state the servers already hold | Nothing — the vehicle is never contacted | every 10 minutes |
 | **Poll vehicle** | Wakes the telematics unit and tells it to upload | Draws on the 12V battery | every 2 hours |
 
-Both are configurable. Go to **Settings → Devices & Services → Toyota / Subaru
+Both are configurable. Go to **Settings → Devices & Services → Subaru / Toyota
 (North America) → Configure**, and set either to **0 to turn it off entirely**.
 
 **About 5 minutes is the recommended minimum for Refresh.** No limit is
@@ -230,7 +230,7 @@ sends](https://github.com/bhaggs/ha-toyota-na/issues/2).
 
 ### Debug logging
 
-Settings → Devices & Services → **Toyota / Subaru (North America)** → the
+Settings → Devices & Services → **Subaru / Toyota (North America)** → the
 three-dot menu → **Enable debug logging**. Reproduce the problem, then **Disable
 debug logging**, and the browser downloads the log. Or in `configuration.yaml`:
 

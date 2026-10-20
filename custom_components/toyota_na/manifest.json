@@ -1,6 +1,6 @@
 {
     "domain": "toyota_na",
-    "name": "Toyota / Subaru (North America)",
+    "name": "Subaru / Toyota (North America)",
     "after_dependencies": ["cloud","http"],
     "codeowners": ["@bhaggs", "@vanstinator", "@widewing"],
     "config_flow": true,

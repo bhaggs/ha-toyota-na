@@ -1,5 +1,5 @@
 {
-  "name": "Toyota / Subaru (North America)",
+  "name": "Subaru / Toyota (North America)",
   "domains": ["device_tracker", "sensor"],
   "homeassistant": "2026.8.0",
   "iot_class": ["Cloud Polling"],

@@ -3,7 +3,7 @@
       "step": {
         "user": {
           "title": "Connected Services",
-          "description": "Select your brand and sign in with your Toyota or SubaruConnect account",
+          "description": "Select your brand and sign in with your SubaruConnect or Toyota account",
           "data": {
             "brand": "Brand",
             "username": "Username",
