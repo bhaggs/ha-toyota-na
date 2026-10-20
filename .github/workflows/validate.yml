@@ -25,3 +25,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # The code is forked from upstream, which has no license, and isn't
+          # ours to license.
+          ignore: license
