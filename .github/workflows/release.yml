@@ -14,7 +14,7 @@ jobs:
     name: Prepare release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # HACS reads hacs.json's `filename` from the release assets and expects
       # the integration files at the zip root, so build from inside the
