@@ -12,6 +12,10 @@ be different code without colliding. For history before the fork, see
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [2.7.0-subaru.21] - 2026-11-04
+
 ### Changed
 
 - A refused sign-in now says why. The log names the login server and the
