@@ -143,6 +143,14 @@ class OneAuth:
                 ) as resp:
                     body = await resp.text()
                     if resp.status != 200:
+                        # The status alone, so the reason reaches a report
+                        # without debug logging; the body can carry account
+                        # details, so it stays at debug.
+                        _LOGGER.error(
+                            "Sign-in rejected by the %s login server (HTTP %d)",
+                            self.brand.name,
+                            resp.status,
+                        )
                         _LOGGER.debug(
                             "authenticate -> HTTP %d: %s", resp.status, body[:500]
                         )

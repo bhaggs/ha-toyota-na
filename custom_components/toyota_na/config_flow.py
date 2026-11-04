@@ -83,7 +83,7 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if data:
                     return await self.async_create_or_update_entry(data=data)
             except AuthError:
-                errors["base"] = "not_logged_in"
+                errors["base"] = "otp_not_logged_in"
                 _LOGGER.error("Not logged in with one time password")
             except Exception as e:
                 errors["base"] = "unknown"

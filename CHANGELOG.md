@@ -12,7 +12,12 @@ be different code without colliding. For history before the fork, see
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- A refused sign-in now says why. The log names the login server and the
+  HTTP status, and the form asks you to check that the brand matches your
+  account, along with your username and password. A refused one-time code
+  shows *Invalid Verification code* instead of the sign-in message.
 
 ## [2.7.0-subaru.20] - 2026-10-20
 

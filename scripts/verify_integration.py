@@ -1544,6 +1544,102 @@ async def s14_brand_choice():
           unique_id({BRAND: "S", "email": "a@b.c"}) == f"{DOMAIN}:S:a@b.c")
 
 
+async def s15_sign_in_failures():
+    # A rejected sign-in must say why at the default log level, without the
+    # response body, which can carry account details.
+    import json
+
+    from toyota_na.exceptions import AuthError, LoginError
+
+    from custom_components.toyota_na.const import BRAND
+    from custom_components.toyota_na.oneapi import OneAuth, auth as auth_mod
+
+    secret = "someone@example.com"
+    body = json.dumps({"code": 401, "message": f"Login failure for {secret}"})
+
+    class Response:
+        status = 401
+
+        async def text(self):
+            return body
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    class Session:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+        def post(self, *_args, **_kwargs):
+            return Response()
+
+    records = []
+
+    class Grab(logging.Handler):
+        def emit(self, record):
+            records.append((record.levelno, record.getMessage()))
+
+    grab = Grab()
+    logger = logging.getLogger("custom_components.toyota_na")
+    logger.addHandler(grab)
+    old_level = logger.level
+    logger.setLevel(logging.DEBUG)
+    raised = None
+    try:
+        with patch.object(auth_mod.aiohttp, "ClientSession", Session):
+            try:
+                await OneAuth(brand="S").authorize("u", "p")
+            except LoginError as error:
+                raised = error
+    finally:
+        logger.removeHandler(grab)
+        logger.setLevel(old_level)
+
+    check("a rejected sign-in raises LoginError", raised is not None)
+    loud = [r for r in records if r[0] >= logging.WARNING]
+    check("...logs the brand and HTTP status as an error",
+          any(r[0] == logging.ERROR and "Subaru" in r[1] and "HTTP 401" in r[1] for r in loud),
+          str(loud))
+    check("...with no response body above debug",
+          not any(secret in r[1] for r in loud), str(loud))
+    check("...and the body still at debug",
+          any(r[0] == logging.DEBUG and secret in r[1] for r in records))
+
+    print("   -- what the form shows --")
+
+    async def refuse(*_args, **_kwargs):
+        raise LoginError()
+
+    flow = config_flow.ToyotaNAConfigFlow()
+    flow.hass = new_hass()
+    with patch.object(OneAuth, "authorize", refuse):
+        result = await flow.async_step_user(
+            {BRAND: "S", "username": "u", "password": "p"}
+        )
+    check("a refused password shows not_logged_in",
+          result["errors"] == {"base": "not_logged_in"}, str(result["errors"]))
+    with patch.object(flow, "async_get_entry_data", refuse):
+        result = await flow.async_step_otp({"code": "123456"})
+    check("a refused code shows otp_not_logged_in",
+          result["errors"] == {"base": "otp_not_logged_in"}, str(result["errors"]))
+    strings = json.loads(
+        (REPO / "custom_components/toyota_na/translations/en.json").read_text()
+    )["config"]["error"]
+    check("the sign-in error points at the brand",
+          "brand" in strings["not_logged_in"], strings["not_logged_in"])
+    check("every error the flow sets has a message",
+          {"not_logged_in", "otp_not_logged_in", "unknown"} <= strings.keys())
+
+
 SECTIONS = [
     ("1. async_setup, services, options flow", s1_setup_and_services),
     ("2. interval options matrix", s2_interval_matrix),
@@ -1559,6 +1655,7 @@ SECTIONS = [
     ("12. a network outage", s12_network_outage),
     ("13. brand images", s13_brand_images),
     ("14. existing entries keep their brand", s14_brand_choice),
+    ("15. sign-in failures say why", s15_sign_in_failures),
 ]
 
 

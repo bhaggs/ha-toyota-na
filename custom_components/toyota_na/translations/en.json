@@ -19,7 +19,7 @@
         }
       },
       "error": {
-        "not_logged_in": "Not logged in",
+        "not_logged_in": "Sign-in failed. Check that the brand matches your account, and your username and password.",
         "otp_not_logged_in": "Invalid Verification code",
         "unknown": "Unexpected error."
       },
