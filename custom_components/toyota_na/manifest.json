@@ -2,6 +2,7 @@
     "domain": "toyota_na",
     "name": "Subaru / Toyota (North America)",
     "after_dependencies": ["cloud","http"],
+    "categories": ["vehicles_transport.cars_evs", "energy.ev_charging"],
     "codeowners": ["@bhaggs", "@vanstinator", "@widewing"],
     "config_flow": true,
     "documentation": "https://github.com/bhaggs/ha-toyota-na",
