@@ -15,15 +15,35 @@ This is a fork of [widewing/ha-toyota-na](https://github.com/widewing/ha-toyota-
 
 ## Installation
 
-Requires [HACS](https://hacs.xyz/docs/setup/download).
+Requires Home Assistant 2026.8 or later.
+
+**Home Assistant 2026.11 and later**, through the built-in Marketplace:
+
+1. **Settings → Marketplace → Add from link**
+2. Enter `https://github.com/bhaggs/ha-toyota-na` and select **Add**. The first
+   time, the Marketplace asks you to connect a GitHub account.
+3. Open **Subaru / Toyota (North America)** and select **Install**. Setup opens
+   straight away, with no restart.
+
+**Home Assistant 2026.8 to 2026.10**, through
+[HACS](https://hacs.xyz/docs/setup/download):
 
 1. HACS → ⋮ → **Custom repositories**
 2. Add `https://github.com/bhaggs/ha-toyota-na` as an **Integration**
 3. Install **Subaru / Toyota (North America)**, then restart Home Assistant
 4. **Settings → Devices & Services → Add Integration**, search for
    *Subaru / Toyota (North America)*
-5. Choose **Subaru**, sign in, and enter the one-time code sent to your email or
-   phone
+
+Then, on the sign-in form, change **Brand** to **Subaru**. It starts on Toyota,
+and Subaru credentials are rejected there. Sign in with your SubaruConnect username
+and password, and enter the one-time code sent to your email or phone.
+
+Upgrading to 2026.11 moves a HACS install into the Marketplace on its own; there
+is nothing to redo.
+
+To test prereleases on 2026.11 or later, turn them on for this repository:
+**Settings → Devices & Services → Marketplace**, open the repository's device, enable the
+**Pre-release** entity (it starts disabled), then turn the switch on.
 
 Releases are versioned `2.7.0-subaru.N`, marking the upstream release this fork
 is built on.

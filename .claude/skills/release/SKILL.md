@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # Cut a release
 
-Publishing a release reaches every HACS user, so confirm with the maintainer
+Publishing a release reaches every Marketplace and HACS user, so confirm with the maintainer
 before step 5 and stop on any failure. Pass `--repo bhaggs/ha-toyota-na` to
 every `gh` command; without it `gh` targets the upstream parent.
 

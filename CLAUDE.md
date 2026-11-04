@@ -94,5 +94,5 @@ these steps in order.
   `.github/workflows/release.yml`, which builds `ha_toyota_na.zip`. Check the
   published asset, not just the tag.
 - Gate a risky release with `--prerelease`, never a version suffix:
-  `2.7.0-subaru.16-beta.1` sorts below `.15` in HACS. Bump
+  `2.7.0-subaru.16-beta.1` sorts below `.15` in HACS and the Marketplace. Bump
   `manifest.json`'s `version` to match the tag.
