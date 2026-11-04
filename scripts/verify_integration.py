@@ -1640,6 +1640,39 @@ async def s15_sign_in_failures():
           {"not_logged_in", "otp_not_logged_in", "unknown"} <= strings.keys())
 
 
+async def s16_device_info():
+    # A dict is only a compatibility layer from HA 2026.11, where DeviceInfo
+    # became a dataclass; before it, DeviceInfo(...) builds the TypedDict.
+    from homeassistant.helpers.device_registry import DeviceInfo
+
+    hass = new_hass()
+    vehicle = FakeVehicle("JF2ZCACC1R8000001")
+    entry = fake_entry()
+    coordinator = make_coordinator(hass, entry, [vehicle])
+    coordinator.brand = "S"
+    hass.data[DOMAIN] = {"e1": {"coordinator": coordinator}}
+    added = []
+    module = __import__("custom_components.toyota_na.sensor", fromlist=["x"])
+    await module.async_setup_entry(
+        hass, entry, lambda entities, *a, **k: added.extend(entities)
+    )
+    info = added[0].device_info
+
+    def field(name):
+        return getattr(info, name) if hasattr(info, name) else info[name]
+
+    if isinstance(DeviceInfo, type) and not issubclass(DeviceInfo, dict):
+        check("device_info is a DeviceInfo, not a dict",
+              isinstance(info, DeviceInfo) and not isinstance(info, dict), type(info).__name__)
+    else:
+        check("device_info is the DeviceInfo TypedDict", isinstance(info, dict))
+    check("device_info identifies the vehicle by VIN",
+          field("identifiers") == {(DOMAIN, vehicle.vin)})
+    check("...with its brand as manufacturer", field("manufacturer") == get_brand("S").manufacturer,
+          str(field("manufacturer")))
+    check("...and the VIN as serial number", field("serial_number") == vehicle.vin)
+
+
 SECTIONS = [
     ("1. async_setup, services, options flow", s1_setup_and_services),
     ("2. interval options matrix", s2_interval_matrix),
@@ -1656,6 +1689,7 @@ SECTIONS = [
     ("13. brand images", s13_brand_images),
     ("14. existing entries keep their brand", s14_brand_choice),
     ("15. sign-in failures say why", s15_sign_in_failures),
+    ("16. device info", s16_device_info),
 ]
 
 

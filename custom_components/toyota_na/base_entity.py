@@ -67,15 +67,17 @@ class ToyotaNABaseEntity(CoordinatorEntity[list[ToyotaVehicle]]):
         # Toyota so this stays correct if the attribute is ever missing.
         brand = get_brand(getattr(self.coordinator, "brand", None))
 
-        return {
-            "identifiers": {(DOMAIN, self.vin)},
+        # Keyword arguments, not a dict: a TypedDict before HA 2026.11 and a
+        # dataclass from it, so this builds the right thing on both.
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.vin)},
             # Only the default. Renaming the device in the UI now cascades to
             # every entity on it.
-            "name": name,
-            "model": model,
-            "manufacturer": brand.manufacturer,
-            "serial_number": self.vin,
-        }
+            name=name,
+            model=model,
+            manufacturer=brand.manufacturer,
+            serial_number=self.vin,
+        )
 
     @property
     def vehicle(self) -> Union[ToyotaVehicle, None]:
