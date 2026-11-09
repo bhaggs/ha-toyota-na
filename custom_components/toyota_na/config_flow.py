@@ -21,7 +21,7 @@ from .const import (
     MAX_FETCH_MINUTES,
     MAX_POLL_HOURS,
 )
-from .oneapi import BRANDS, DEFAULT_BRAND, OneAuth, OneClient, get_brand
+from .oneapi import BRANDS, DEFAULT_BRAND, LoginBlocked, OneAuth, OneClient, get_brand
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +54,8 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input["username"], user_input["password"]
                 )
                 return await self.async_step_otp()
+            except LoginBlocked:
+                errors["base"] = "login_blocked"
             except AuthError:
                 errors["base"] = "not_logged_in"
                 _LOGGER.error("Not logged in with username and password")
@@ -82,6 +84,8 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data = await self.async_get_entry_data(self.client, errors)
                 if data:
                     return await self.async_create_or_update_entry(data=data)
+            except LoginBlocked:
+                errors["base"] = "login_blocked"
             except AuthError:
                 errors["base"] = "otp_not_logged_in"
                 _LOGGER.error("Not logged in with one time password")
@@ -127,6 +131,8 @@ class ToyotaNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "username": self.user_info["username"],
                 "password": self.user_info["password"],
             }
+        except LoginBlocked:
+            errors["base"] = "login_blocked"
         except AuthError:
             errors["base"] = "otp_not_logged_in"
             _LOGGER.error("Invalid Verification Code")

@@ -1614,6 +1614,43 @@ async def s15_sign_in_failures():
     check("...and the body still at debug",
           any(r[0] == logging.DEBUG and secret in r[1] for r in records))
 
+    print("   -- blocked before the credentials were checked --")
+    from custom_components.toyota_na.oneapi import LoginBlocked
+
+    async def sign_in(status, text):
+        nonlocal body
+        body = text
+        Response.status = status
+        records.clear()
+        logger.addHandler(grab)
+        logger.setLevel(logging.DEBUG)
+        try:
+            with patch.object(auth_mod.aiohttp, "ClientSession", Session):
+                try:
+                    await OneAuth(brand="S").authorize("u", "p")
+                except LoginError as error:
+                    return error
+        finally:
+            logger.removeHandler(grab)
+            logger.setLevel(old_level)
+        return None
+
+    gateway = await sign_in(403, '{"message":"Forbidden"}')
+    check("a gateway 403 raises LoginBlocked", isinstance(gateway, LoginBlocked), repr(gateway))
+    check("...and says so in the log",
+          any(r[0] == logging.ERROR and "blocked before" in r[1] and "HTTP 403" in r[1]
+              for r in records), str(records))
+    html = await sign_in(403, "<html><body>Request blocked</body></html>")
+    check("an HTML 403 is a block too", isinstance(html, LoginBlocked), repr(html))
+    forgerock = await sign_in(
+        403, json.dumps({"code": 403, "reason": "Forbidden", "message": "Account locked"})
+    )
+    check("a ForgeRock 403 is a refusal, not a block",
+          isinstance(forgerock, LoginError) and not isinstance(forgerock, LoginBlocked),
+          repr(forgerock))
+    wrong = await sign_in(401, json.dumps({"code": 401, "reason": "Unauthorized"}))
+    check("a 401 is never a block", not isinstance(wrong, LoginBlocked), repr(wrong))
+
     print("   -- what the form shows --")
 
     async def refuse(*_args, **_kwargs):
@@ -1631,13 +1668,29 @@ async def s15_sign_in_failures():
         result = await flow.async_step_otp({"code": "123456"})
     check("a refused code shows otp_not_logged_in",
           result["errors"] == {"base": "otp_not_logged_in"}, str(result["errors"]))
+
+    async def block(*_args, **_kwargs):
+        raise LoginBlocked()
+
+    flow = config_flow.ToyotaNAConfigFlow()
+    flow.hass = new_hass()
+    with patch.object(OneAuth, "authorize", block):
+        result = await flow.async_step_user(
+            {BRAND: "S", "username": "u", "password": "p"}
+        )
+    check("a blocked sign-in shows login_blocked",
+          result["errors"] == {"base": "login_blocked"}, str(result["errors"]))
+    with patch.object(flow, "async_get_entry_data", block):
+        result = await flow.async_step_otp({"code": "123456"})
+    check("...at the code step too",
+          result["errors"] == {"base": "login_blocked"}, str(result["errors"]))
     strings = json.loads(
         (REPO / "custom_components/toyota_na/translations/en.json").read_text()
     )["config"]["error"]
     check("the sign-in error points at the brand",
           "brand" in strings["not_logged_in"], strings["not_logged_in"])
     check("every error the flow sets has a message",
-          {"not_logged_in", "otp_not_logged_in", "unknown"} <= strings.keys())
+          {"not_logged_in", "otp_not_logged_in", "login_blocked", "unknown"} <= strings.keys())
 
 
 async def s16_device_info():

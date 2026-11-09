@@ -38,6 +38,30 @@ class TokenRefreshError(Exception):
     """
 
 
+class LoginBlocked(LoginError):
+    """The login server's firewall refused the request before any credentials
+    were checked.
+
+    The ForgeRock login service refuses a wrong username or password with its
+    own JSON (a "code" and a "reason"). A 403 without that - a bare
+    {"message": "Forbidden"}, or a page of HTML - comes from the gateway in
+    front of it, which blocks by network or location: a VPN, a hosted server,
+    a country outside the service's region. Asking the user to recheck their
+    password sends them the wrong way (bhaggs/ha-toyota-na#28).
+    """
+
+
+def _blocked_before_login(status, body):
+    """Whether a refusal came from the gateway rather than the login service."""
+    if status != 403:
+        return False
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        return True
+    return not (isinstance(parsed, dict) and "reason" in parsed)
+
+
 class OneAuth:
     """Token lifecycle for one account on one brand."""
 
@@ -146,15 +170,26 @@ class OneAuth:
                         # The status alone, so the reason reaches a report
                         # without debug logging; the body can carry account
                         # details, so it stays at debug.
-                        _LOGGER.error(
-                            "Sign-in rejected by the %s login server (HTTP %d)",
-                            self.brand.name,
-                            resp.status,
-                        )
+                        blocked = _blocked_before_login(resp.status, body)
+                        if blocked:
+                            _LOGGER.error(
+                                "Sign-in blocked before the %s login server checked "
+                                "the credentials (HTTP %d). This usually means a VPN, "
+                                "a hosted server, or a location outside the service's "
+                                "region",
+                                self.brand.name,
+                                resp.status,
+                            )
+                        else:
+                            _LOGGER.error(
+                                "Sign-in rejected by the %s login server (HTTP %d)",
+                                self.brand.name,
+                                resp.status,
+                            )
                         _LOGGER.debug(
                             "authenticate -> HTTP %d: %s", resp.status, body[:500]
                         )
-                        raise LoginError()
+                        raise LoginBlocked() if blocked else LoginError()
                     data = json.loads(body)
                     if "tokenId" in data:
                         break

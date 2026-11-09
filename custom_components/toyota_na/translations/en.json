@@ -21,6 +21,7 @@
       "error": {
         "not_logged_in": "Sign-in failed. Check that the brand matches your account, and your username and password.",
         "otp_not_logged_in": "Invalid Verification code",
+        "login_blocked": "The login server blocked the request before checking your username and password. This usually means a VPN, a hosted server, or a location outside the service's region.",
         "unknown": "Unexpected error."
       },
       "abort": {
