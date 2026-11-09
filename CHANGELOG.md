@@ -14,7 +14,7 @@ be different code without colliding. For history before the fork, see
 
 Nothing yet.
 
-## [2.7.0-subaru.21] - 2026-11-04
+## [2.7.0-subaru.21] - 2026-11-09
 
 ### Changed
 
@@ -22,6 +22,11 @@ Nothing yet.
   HTTP status, and the form asks you to check that the brand matches your
   account, along with your username and password. A refused one-time code
   shows *Invalid Verification code* instead of the sign-in message.
+- A sign-in blocked before the login server checks the credentials gets its
+  own message, rather than asking you to recheck your password. That happens
+  when the gateway in front of the login server refuses the request outright,
+  usually because of a VPN, a hosted server, or a location outside the
+  service's region.
 
 ## [2.7.0-subaru.20] - 2026-10-20
 
